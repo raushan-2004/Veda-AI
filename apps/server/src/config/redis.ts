@@ -8,10 +8,10 @@ export async function connectRedis(): Promise<void> {
   redis = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
     retryStrategy: (times) => {
-      if (times > 3) {
-        return null; // Stop retrying quickly to allow graceful fallback
+      if (times > 1) {
+        return null; // Stop retrying immediately to keep console clean
       }
-      return Math.min(times * 200, 1000);
+      return 1000;
     },
     lazyConnect: true,
   });

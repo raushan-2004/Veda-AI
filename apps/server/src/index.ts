@@ -6,6 +6,7 @@ import { connectDB } from './config/database';
 import { connectRedis } from './config/redis';
 import { env } from './config/env';
 import { initSocket } from './socket';
+import { initWorkers } from './workers';
 
 const PORT = env.PORT;
 
@@ -22,6 +23,9 @@ async function bootstrap() {
     } catch (redisError) {
       console.warn('⚠️ Redis connection failed. Local BullMQ background queues will run in fallback/retry mode. Ensure Redis is running locally if queue features are required.');
     }
+
+    // Initialize background BullMQ workers
+    initWorkers();
 
     // Create HTTP server
     const httpServer = createServer(app);
