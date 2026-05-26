@@ -4,6 +4,8 @@ import { JobStatusModel } from '@/models/job-status.model';
 import { AssignmentModel } from '@/models/assignment.model';
 import { pdfService } from '@/services/pdf.service';
 import { logger } from '@/utils/logger';
+import { getRedis } from '@/config/redis';
+import { env } from '@/config/env';
 
 export const pdfGenerationWorker = new Worker(
   'pdf-generation',
@@ -37,6 +39,15 @@ export const pdfGenerationWorker = new Worker(
       await updateJob('processing', 65, 'Assembling generated questions & rendering PDF booklet');
       await pdfService.generateAssessmentPDF(assessment);
 
+      // Invalidate Redis cache
+      try {
+        const redisClient = getRedis();
+        await redisClient.del(`assessment:cache:${assessmentId}`);
+        logger.info(`🧹 Worker Invalidated Redis Cache after PDF compilation: ${assessmentId}`);
+      } catch (cacheErr: any) {
+        logger.warn(`⚠️ Redis cache invalidation skipped: ${cacheErr.message}`);
+      }
+
       // Step 3: Finished rendering (100%)
       await updateJob('completed', 100, 'Printable PDF booklet generated successfully');
       logger.info(`✅ PDF successfully compiled for assessment: ${assessmentId}`);
@@ -51,7 +62,7 @@ export const pdfGenerationWorker = new Worker(
       throw error;
     }
   },
-  { connection, concurrency: 2 }
+  { connection, concurrency: env.QUEUE_CONCURRENCY || 5 }
 );
 
 export default pdfGenerationWorker;

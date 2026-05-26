@@ -6,6 +6,9 @@ import { GeneratedPaperModel } from '@/models/generated-paper.model';
 import { aiService } from '@/services/ai.service';
 import { getIO } from '@/socket';
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
+import { getRedis } from '@/config/redis';
 
 export interface AssessmentCreationData {
   title: string;
@@ -25,17 +28,43 @@ export interface AssessmentCreationData {
 
 export class AssessmentService {
   public async getAll() {
-    return AssignmentModel.find().sort({ createdAt: -1 });
+    return AssignmentModel.find().sort({ createdAt: -1 }).lean();
   }
 
   public async getById(id: string) {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundError(`Assignment with ID '${id}' is not a valid identifier`);
     }
-    const item = await AssignmentModel.findById(id).populate('generatedPaper');
+
+    const cacheKey = `assessment:cache:${id}`;
+    
+    // Step 1: Query Redis cache
+    try {
+      const redisClient = getRedis();
+      const cachedData = await redisClient.get(cacheKey);
+      if (cachedData) {
+        logger.info(`⚡ Redis Cache HIT for getById assessment: ${id}`);
+        return JSON.parse(cachedData);
+      }
+    } catch (cacheErr: any) {
+      logger.warn(`⚠️ Redis cache read skipped: ${cacheErr.message}`);
+    }
+
+    // Step 2: Query MongoDB on cache miss
+    logger.info(`🐢 Redis Cache MISS for getById assessment: ${id} - querying MongoDB`);
+    const item = await AssignmentModel.findById(id).populate('generatedPaper').lean();
     if (!item) {
       throw new NotFoundError(`Assignment with ID '${id}' not found`);
     }
+
+    // Step 3: Populate Redis cache with 5 min TTL (300 seconds)
+    try {
+      const redisClient = getRedis();
+      await redisClient.set(cacheKey, JSON.stringify(item), 'EX', 300);
+    } catch (cacheErr: any) {
+      logger.warn(`⚠️ Redis cache write skipped: ${cacheErr.message}`);
+    }
+
     return item;
   }
 
@@ -139,6 +168,46 @@ export class AssessmentService {
 
     return assignment;
   }
+  
+  public async delete(id: string) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new NotFoundError(`Assignment with ID '${id}' is not a valid identifier`);
+    }
+    const assignment = await AssignmentModel.findById(id);
+    if (!assignment) {
+      throw new NotFoundError(`Assignment with ID '${id}' not found`);
+    }
+
+    // Delete associated GeneratedPaper
+    if (assignment.generatedPaper) {
+      await GeneratedPaperModel.findByIdAndDelete(assignment.generatedPaper);
+    }
+
+    // Delete the Assignment itself
+    await AssignmentModel.findByIdAndDelete(id);
+
+    // Delete associated PDF if it exists
+    const filePath = path.join(__dirname, '../../temp/pdfs', `${id}.pdf`);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        logger.info(`🗑️ Deleted compiled PDF file: ${id}.pdf`);
+      } catch (err) {
+        logger.error(`Error deleting PDF file: ${err}`);
+      }
+    }
+
+    // Invalidate Redis cache
+    try {
+      const redisClient = getRedis();
+      await redisClient.del(`assessment:cache:${id}`);
+      logger.info(`🧹 Invalidated Redis Cache for deleted assessment: ${id}`);
+    } catch (cacheErr: any) {
+      logger.warn(`⚠️ Redis cache invalidation skipped: ${cacheErr.message}`);
+    }
+
+    return true;
+  }
 
   private async runInProcessGeneration(assessmentId: string, topic: string, numQuestions: number, formats: string[]): Promise<void> {
     const jobId = `job_${assessmentId}`;
@@ -231,6 +300,15 @@ export class AssessmentService {
           generatedPaper: generatedPaper._id,
           status: 'published',
         });
+
+        // Invalidate Redis cache
+        try {
+          const redisClient = getRedis();
+          await redisClient.del(`assessment:cache:${assessmentId}`);
+          logger.info(`🧹 Invalidated Redis Cache for finished fallback assessment: ${assessmentId}`);
+        } catch (cacheErr: any) {
+          logger.warn(`⚠️ Redis cache invalidation skipped: ${cacheErr.message}`);
+        }
 
         // Step 4: Finished (100%)
         await new Promise((r) => setTimeout(r, 800));

@@ -219,9 +219,11 @@ interface AssessmentState {
   setSearchQuery: (query: string) => void;
 
   // --- OPTIMISTIC UI ASYNC ACTIONS ---
+  fetchAssessmentsAsync: () => Promise<void>;
   addAssessmentAsync: (assessment: Assessment) => Promise<void>;
   updateAssessmentAsync: (id: string, partial: Partial<Assessment>) => Promise<void>;
   removeAssessmentAsync: (id: string) => Promise<void>;
+  retryAssessmentAsync: (id: string) => Promise<void>;
 }
 
 export const useAssessmentStore = create<AssessmentState>()(
@@ -249,6 +251,24 @@ export const useAssessmentStore = create<AssessmentState>()(
 
       setSearchQuery: (searchQuery) =>
         set({ searchQuery }, false, 'assessment/setSearchQuery'),
+
+      // Fetch Assessments Action
+      fetchAssessmentsAsync: async () => {
+        set({ isLoading: true }, false, 'assessment/fetchLoading');
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/assessments`);
+          if (!res.ok) throw new Error('Failed to load assessments');
+          const result = await res.json();
+          if (result.success) {
+            set({ assessments: result.data, isLoading: false }, false, 'assessment/fetchSuccess');
+          } else {
+            throw new Error(result.message || 'Failed to load assessments');
+          }
+        } catch (error) {
+          set({ isLoading: false }, false, 'assessment/fetchError');
+          throw error;
+        }
+      },
 
       // Optimistic Add Action
       addAssessmentAsync: async (assessment) => {
@@ -353,16 +373,14 @@ export const useAssessmentStore = create<AssessmentState>()(
         );
 
         try {
-          // Step 2: Simulate async server deletion
-          await new Promise<void>((resolve, reject) => {
-            setTimeout(() => {
-              if (Math.random() < 0.05) {
-                reject(new Error('Failed to delete catalog entry from server'));
-              } else {
-                resolve();
-              }
-            }, 1000);
+          // Step 2: Call real Express DELETE API
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/assessments/${id}`, {
+            method: 'DELETE',
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || 'Failed to delete assessment from database');
+          }
           
           set({ rollbackAssessments: null }, false, 'assessment/removeCommit');
         } catch (error) {
@@ -374,6 +392,49 @@ export const useAssessmentStore = create<AssessmentState>()(
             }, 
             false, 
             'assessment/removeRollback'
+          );
+          throw error;
+        }
+      },
+
+      // Optimistic Retry / Regenerate Action
+      retryAssessmentAsync: async (id) => {
+        const previousAssessments = get().assessments;
+        
+        // Optimistically set the status to 'draft'
+        const updated = previousAssessments.map((a) =>
+          a._id === id ? { ...a, status: 'draft' as any } : a
+        );
+        
+        set(
+          { 
+            assessments: updated,
+            rollbackAssessments: previousAssessments
+          }, 
+          false, 
+          'assessment/retryOptimistic'
+        );
+
+        try {
+          // Call the regenerate endpoint
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/assessments/${id}/regenerate`, {
+            method: 'POST',
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || 'Failed to retry assessment generation');
+          }
+          
+          set({ rollbackAssessments: null }, false, 'assessment/retryCommit');
+        } catch (error) {
+          // Step 3: Rollback on failure
+          set(
+            { 
+              assessments: previousAssessments,
+              rollbackAssessments: null 
+            }, 
+            false, 
+            'assessment/retryRollback'
           );
           throw error;
         }

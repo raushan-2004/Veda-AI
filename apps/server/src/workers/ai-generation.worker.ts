@@ -6,6 +6,8 @@ import { AssignmentModel } from '@/models/assignment.model';
 import { aiService } from '@/services/ai.service';
 import { getIO } from '@/socket';
 import { logger } from '@/utils/logger';
+import { getRedis } from '@/config/redis';
+import { env } from '@/config/env';
 
 export const aiGenerationWorker = new Worker(
   'ai-generation',
@@ -110,6 +112,15 @@ export const aiGenerationWorker = new Worker(
         status: 'published', // Transition assignment to active status
       });
 
+      // Invalidate Redis cache
+      try {
+        const redisClient = getRedis();
+        await redisClient.del(`assessment:cache:${assessmentId}`);
+        logger.info(`🧹 Worker Invalidated Redis Cache for finished assessment: ${assessmentId}`);
+      } catch (cacheErr: any) {
+        logger.warn(`⚠️ Redis cache invalidation skipped: ${cacheErr.message}`);
+      }
+
       // Step 4: Finished (100%)
       await updateJob('completed', 100, 'Assessment compiled and published successfully');
       logger.info(`✅ AI generation successfully completed for assessment: ${assessmentId}`);
@@ -145,7 +156,7 @@ export const aiGenerationWorker = new Worker(
       throw error;
     }
   },
-  { connection, concurrency: 2 }
+  { connection, concurrency: env.QUEUE_CONCURRENCY || 5 }
 );
 
 export default aiGenerationWorker;

@@ -84,6 +84,19 @@ export class AssessmentController {
       next(error);
     }
   };
+
+  public delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      await assessmentService.delete(id);
+      res.status(200).json({
+        success: true,
+        message: 'Assessment deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const assessmentController = new AssessmentController();
