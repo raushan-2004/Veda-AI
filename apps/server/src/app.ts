@@ -15,9 +15,17 @@ export const app = express();
 
 // ==================== Security Middleware ====================
 app.use(helmet());
+
+// Support dynamic, comma-separated origins or reflect wildcard back to allow credential support
+const allowedOrigins = env.CORS_ORIGIN === '*' 
+  ? true 
+  : env.CORS_ORIGIN.indexOf(',') !== -1 
+    ? env.CORS_ORIGIN.split(',') 
+    : env.CORS_ORIGIN;
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

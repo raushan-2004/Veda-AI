@@ -3,6 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Heading, Text } from "@/components/ui/typography";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +14,8 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Loader } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
+import { AssignmentFormSchema, type AssignmentFormData } from "@/lib/schemas/assignment-form.schema";
+import { useAssignmentFormStore } from "@/store/assignment-form.store";
 import { 
   Sparkles, 
   Settings, 
@@ -21,11 +25,15 @@ import {
   BookOpen, 
   ListTodo, 
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Calendar,
+  UploadCloud,
+  FileText,
+  Trash2,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Simulated AI steps
 const generationSteps = [
   "Structuring topic paradigms and cognitive map...",
   "Formulating multiple-choice context arrays...",
@@ -37,74 +45,187 @@ const generationSteps = [
 export default function CreateAssignmentPage() {
   const router = useRouter();
   const { toast } = useToast();
-
-  // Wizard state parameters
-  const [topic, setTopic] = React.useState("");
-  const [audience, setAudience] = React.useState("");
-  const [difficulty, setDifficulty] = React.useState<"beginner" | "intermediate" | "expert">("intermediate");
-  const [questionCount, setQuestionCount] = React.useState<5 | 10 | 20>(10);
-  const [selectedTypes, setSelectedTypes] = React.useState<string[]>(["mcq", "coding"]);
   
-  // Simulated AI loading state
+  const {
+    currentStep,
+    formData,
+    uploadProgress,
+    fileName,
+    fileSize,
+    setStep,
+    updateFormData,
+    setUploadedFile,
+    setUploadProgress,
+    resetForm,
+  } = useAssignmentFormStore();
+
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [currentStepIdx, setCurrentStepIdx] = React.useState(0);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const toggleType = (type: string) => {
-    if (selectedTypes.includes(type)) {
-      if (selectedTypes.length > 1) {
-        setSelectedTypes(selectedTypes.filter((t) => t !== type));
-      }
+  // Initialize React Hook Form
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    trigger,
+    formState: { errors, isValid },
+  } = useForm<AssignmentFormData>({
+    resolver: zodResolver(AssignmentFormSchema),
+    defaultValues: {
+      title: formData.title || "",
+      subject: formData.subject || "",
+      classGrade: formData.classGrade || "",
+      dueDate: formData.dueDate || "",
+      questionTypes: formData.questionTypes || ["mcq"],
+      numberOfQuestions: formData.numberOfQuestions || 10,
+      marks: formData.marks || 20,
+      difficultyDistribution: formData.difficultyDistribution || {
+        beginner: 30,
+        intermediate: 50,
+        expert: 20,
+      },
+      additionalInstructions: formData.additionalInstructions || "",
+    },
+    mode: "onChange",
+  });
+
+  const watchedFields = watch();
+
+  // Proactive real-time auto-saving (serializes state to Zustand persistent store via clean form subscription)
+  React.useEffect(() => {
+    const subscription = watch((value) => {
+      const { file, ...serializable } = value;
+      updateFormData(serializable as any);
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, updateFormData]);
+
+  // Synchronous, proportional difficulty balancing algorithm
+  const handleDifficultyChange = (field: 'beginner' | 'intermediate' | 'expert', value: number) => {
+    const current = watchedFields.difficultyDistribution || { beginner: 30, intermediate: 50, expert: 20 };
+    const otherFields = (['beginner', 'intermediate', 'expert'] as const).filter(f => f !== field);
+    const otherSum = current[otherFields[0]] + current[otherFields[1]];
+    
+    const newDistribution = { ...current, [field]: value };
+    
+    if (otherSum === 0) {
+      newDistribution[otherFields[0]] = Math.round((100 - value) / 2);
+      newDistribution[otherFields[1]] = 100 - value - newDistribution[otherFields[0]];
     } else {
-      setSelectedTypes([...selectedTypes, type]);
+      const factor = (100 - value) / otherSum;
+      const val1 = Math.round(current[otherFields[0]] * factor);
+      const val2 = 100 - value - val1;
+      newDistribution[otherFields[0]] = val1;
+      newDistribution[otherFields[1]] = val2;
+    }
+    
+    setValue('difficultyDistribution', newDistribution, { shouldValidate: true });
+  };
+
+  // Drag and drop file upload event handling
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      setValue('file', files, { shouldValidate: true });
+      simulateFileUpload(files[0]);
     }
   };
 
-  const handleGenerate = () => {
-    if (!topic.trim()) {
-      toast({
-        title: "Configuration Required",
-        description: "Please specify a topic or subject for the assessment.",
-        variant: "destructive",
-      });
-      return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setValue('file', files, { shouldValidate: true });
+      simulateFileUpload(files[0]);
+    }
+  };
+
+  const simulateFileUpload = (file: File) => {
+    setUploadedFile(file.name, file.size);
+    setUploadProgress(0);
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setUploadProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+      }
+    }, 100);
+  };
+
+  const removeFile = () => {
+    setValue('file', undefined);
+    setUploadedFile(null, null);
+    setUploadProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const toggleType = (type: string) => {
+    const currentTypes = watchedFields.questionTypes || [];
+    if (currentTypes.includes(type)) {
+      if (currentTypes.length > 1) {
+        setValue('questionTypes', currentTypes.filter(t => t !== type), { shouldValidate: true });
+      }
+    } else {
+      setValue('questionTypes', [...currentTypes, type], { shouldValidate: true });
+    }
+  };
+
+  // Pagination navigation checks
+  const handleNext = async () => {
+    let fieldsToValidate: Array<keyof AssignmentFormData> = [];
+    if (currentStep === 0) {
+      fieldsToValidate = ['title', 'subject', 'classGrade', 'dueDate'];
+    } else if (currentStep === 1) {
+      fieldsToValidate = ['questionTypes', 'numberOfQuestions', 'marks', 'difficultyDistribution'];
     }
 
-    // Start simulation
+    const isStepValid = await trigger(fieldsToValidate);
+    if (isStepValid) {
+      setStep(currentStep + 1);
+    }
+  };
+
+  const onSubmit = (_data: AssignmentFormData) => {
     setIsGenerating(true);
     setCurrentStepIdx(0);
   };
 
-  // Timer loop for loading steps simulation
+  // Timer loop for simulated AI generation progress stages
   React.useEffect(() => {
     if (!isGenerating) return;
 
     if (currentStepIdx < generationSteps.length) {
       const timer = setTimeout(() => {
         setCurrentStepIdx((prev) => prev + 1);
-      }, 1500); // 1.5 seconds per step
+      }, 1500);
       return () => clearTimeout(timer);
     } else {
-      // Completed, redirect
       setIsGenerating(false);
       toast({
-        title: "Assessment Formulated!",
-        description: `'${topic}' quiz has been successfully generated by our AI agent.`,
+        title: "Assignment Created!",
+        description: `'${watchedFields.title}' assignment has been formulated successfully by Veda AI.`,
         variant: "success" as any,
       });
-      router.push(`/preview/${topic.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
+      const topicSlug = watchedFields.subject.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      resetForm();
+      router.push(`/preview/${topicSlug}`);
     }
-  }, [isGenerating, currentStepIdx, topic, router, toast]);
+  }, [isGenerating, currentStepIdx, router, toast, watchedFields.title, watchedFields.subject, resetForm]);
 
   return (
     <Section size="sm" className="flex-1 flex flex-col pt-6 relative">
-      {/* --- AI GENERATION OVERLAY LOADER (Matching premium high-blur mockups) --- */}
+      {/* --- AI GENERATION OVERLAY LOADER --- */}
       {isGenerating && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-veda-purple-500/10 blur-[130px]" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-veda-indigo-500/10 blur-[130px]" />
 
           <div className="max-w-md w-full text-center space-y-8 relative z-10">
-            {/* Pulsing visual core container */}
             <div className="relative">
               <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 blur-xl opacity-40 animate-pulse" />
               <div className="relative h-20 w-20 rounded-2xl bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 flex items-center justify-center text-white shadow-glow-strong mx-auto animate-bounce duration-1000">
@@ -114,7 +235,7 @@ export default function CreateAssignmentPage() {
 
             <div className="space-y-3">
               <Heading variant="h3" className="text-2xl font-bold text-white tracking-tight">
-                Synthesizing Assessment Core
+                Formulating Assignment Sheet
               </Heading>
               <div className="h-8 flex items-center justify-center">
                 <Text className="text-xs font-mono text-zinc-300 tracking-wide">
@@ -123,7 +244,6 @@ export default function CreateAssignmentPage() {
               </div>
             </div>
 
-            {/* Stepped progress bar */}
             <div className="space-y-2.5">
               <Loader variant="bar" size="md" color="accent" className="h-2 rounded-full bg-zinc-800" />
               <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
@@ -135,197 +255,449 @@ export default function CreateAssignmentPage() {
         </div>
       )}
 
-      <Container className="space-y-6 flex-1 flex flex-col max-w-4xl">
-        {/* Breadcrumb Header */}
+      <Container className="space-y-6 flex-1 flex flex-col max-w-3xl">
+        {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
           <Link href="/dashboard" className="hover:text-foreground flex items-center gap-1">
             <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground font-semibold">Create Quiz Wizard</span>
+          <span className="text-foreground font-semibold">Create Assignment</span>
         </div>
 
-        <div>
-          <Heading variant="h2" as="h1" className="text-2xl font-extrabold sm:text-3xl tracking-tight leading-none">
-            Create New Assessment
-          </Heading>
-          <Text className="text-muted-foreground text-sm mt-1">Configure target subjects, select difficulty metrics, and specify code challenges.</Text>
-        </div>
-
-        <Grid cols={1} mdCols={3} gap={6} className="items-start flex-1 mt-2">
-          {/* Main config forms */}
-          <div className="md:col-span-2 space-y-6">
-            <Card glass className="border border-border/40 shadow-md">
-              <CardHeader className="p-6">
-                <CardTitle className="text-base flex items-center gap-2 font-bold">
-                  <Settings className="h-5 w-5 text-primary" />
-                  Subject Matter Parameters
-                </CardTitle>
-                <CardDescription className="text-xs">Specify what target parameters drive the question generation algorithms.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 pt-0 space-y-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Select a subject / topic</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. React Server Components, CSS Flexbox, Node.js Streams..." 
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Target Audience Profile</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. Junior Frontend Dev, Senior Cloud Engineer..." 
-                    value={audience}
-                    onChange={(e) => setAudience(e.target.value)}
-                    className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Question formats */}
-            <Card glass className="border border-border/40 shadow-md">
-              <CardHeader className="p-6">
-                <CardTitle className="text-base flex items-center gap-2 font-bold">
-                  <ListTodo className="h-5 w-5 text-accent" />
-                  Question Format Options
-                </CardTitle>
-                <CardDescription className="text-xs">Select what formats represent the drafted test sheets.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div 
-                  onClick={() => toggleType("mcq")}
-                  className={cn(
-                    "p-4 rounded-xl border flex items-center justify-between cursor-pointer transition-all duration-200 select-none",
-                    selectedTypes.includes("mcq")
-                      ? "bg-primary/10 border-primary text-foreground shadow-sm font-semibold"
-                      : "bg-muted/5 border-border hover:bg-muted/20 text-muted-foreground"
-                  )}
-                >
-                  <span className="flex items-center gap-2.5 text-xs">
-                    <BookOpen className={cn("h-4.5 w-4.5 shrink-0", selectedTypes.includes("mcq") ? "text-primary" : "text-muted-foreground")} /> 
-                    Multiple Choice (MCQ)
-                  </span>
-                  <div className={cn(
-                    "h-5 w-5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    selectedTypes.includes("mcq") ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
-                  )}>
-                    {selectedTypes.includes("mcq") && <Check className="h-3.5 w-3.5 stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div 
-                  onClick={() => toggleType("coding")}
-                  className={cn(
-                    "p-4 rounded-xl border flex items-center justify-between cursor-pointer transition-all duration-200 select-none",
-                    selectedTypes.includes("coding")
-                      ? "bg-accent/10 border-accent text-foreground shadow-sm font-semibold"
-                      : "bg-muted/5 border-border hover:bg-muted/20 text-muted-foreground"
-                  )}
-                >
-                  <span className="flex items-center gap-2.5 text-xs">
-                    <Code className={cn("h-4.5 w-4.5 shrink-0", selectedTypes.includes("coding") ? "text-accent" : "text-muted-foreground")} /> 
-                    Coding Challenges
-                  </span>
-                  <div className={cn(
-                    "h-5 w-5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    selectedTypes.includes("coding") ? "border-accent bg-accent text-accent-foreground" : "border-muted-foreground/30"
-                  )}>
-                    {selectedTypes.includes("coding") && <Check className="h-3.5 w-3.5 stroke-[3]" />}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Header & Steps Indicator */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/40 pb-5">
+          <div className="space-y-1">
+            <Heading variant="h2" as="h1" className="text-2xl font-extrabold tracking-tight leading-none">
+              Create New Assignment
+            </Heading>
+            <Text className="text-muted-foreground text-xs sm:text-sm">Design visual assessments, structure scoring paradigms, and upload files.</Text>
           </div>
+          
+          {/* Progress Indicators */}
+          <div className="flex items-center gap-2 bg-muted/20 p-1.5 rounded-xl border border-border/40 self-start sm:self-auto text-xs font-bold text-muted-foreground select-none">
+            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 0 ? "bg-background text-foreground shadow-sm" : "")}>
+              1. Basics
+            </span>
+            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 1 ? "bg-background text-foreground shadow-sm" : "")}>
+              2. Schema
+            </span>
+            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 2 ? "bg-background text-foreground shadow-sm" : "")}>
+              3. Assets
+            </span>
+          </div>
+        </div>
 
-          {/* Right sidebar presets */}
+        {/* Assignment Creation Form Content */}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 flex-1 flex flex-col justify-between">
           <div className="space-y-6">
-            <Card glass className="border border-border/40 shadow-md">
-              <CardHeader className="p-5">
-                <CardTitle className="text-base font-bold">Difficulty Preset</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0 space-y-3">
-                <div 
-                  onClick={() => setDifficulty("beginner")}
-                  className={cn(
-                    "p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none text-xs font-semibold flex items-center justify-between",
-                    difficulty === "beginner"
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 shadow-sm"
-                      : "border-border/60 hover:bg-muted/20 text-muted-foreground"
-                  )}
-                >
-                  <span>Beginner Core</span>
-                  {difficulty === "beginner" && <div className="h-2 w-2 rounded-full bg-emerald-500" />}
-                </div>
-                
-                <div 
-                  onClick={() => setDifficulty("intermediate")}
-                  className={cn(
-                    "p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none text-xs font-semibold flex items-center justify-between",
-                    difficulty === "intermediate"
-                      ? "border-primary bg-primary/10 text-primary shadow-sm"
-                      : "border-border/60 hover:bg-muted/20 text-muted-foreground"
-                  )}
-                >
-                  <span>Intermediate Applied</span>
-                  {difficulty === "intermediate" && <div className="h-2 w-2 rounded-full bg-primary" />}
-                </div>
+            {/* STEP 1: CORE PARAMETERS */}
+            {currentStep === 0 && (
+              <Card glass className="border border-border/40 shadow-lg">
+                <CardHeader className="p-6">
+                  <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
+                    <Settings className="h-5 w-5 text-primary" />
+                    Assignment Parameters
+                  </CardTitle>
+                  <CardDescription className="text-xs">Setup core academic descriptors and deadlines.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 pt-0 space-y-4">
+                  {/* Title */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Assignment Title</label>
+                    <Input 
+                      type="text" 
+                      placeholder="e.g. Midterm JavaScript Algorithms, Grade 9 Algebra..." 
+                      className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200"
+                      {...register('title')}
+                    />
+                    {errors.title && (
+                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> {errors.title.message}
+                      </span>
+                    )}
+                  </div>
 
-                <div 
-                  onClick={() => setDifficulty("expert")}
-                  className={cn(
-                    "p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none text-xs font-semibold flex items-center justify-between",
-                    difficulty === "expert"
-                      ? "border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-300 shadow-sm"
-                      : "border-border/60 hover:bg-muted/20 text-muted-foreground"
-                  )}
-                >
-                  <span>Expert Technical</span>
-                  {difficulty === "expert" && <div className="h-2 w-2 rounded-full bg-amber-500" />}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Questions count */}
-            <Card glass className="border border-border/40 shadow-md">
-              <CardHeader className="p-5">
-                <CardTitle className="text-base font-bold">Questions Count</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="grid grid-cols-3 gap-2 bg-muted/20 p-1.5 rounded-xl border border-border/40">
-                  {[5, 10, 20].map((count) => (
-                    <div
-                      key={count}
-                      onClick={() => setQuestionCount(count as any)}
-                      className={cn(
-                        "py-2.5 rounded-lg text-center cursor-pointer transition-all duration-200 select-none text-xs font-bold",
-                        questionCount === count
-                          ? "bg-background border border-border/40 text-foreground shadow-sm"
-                          : "hover:bg-muted/30 text-muted-foreground"
+                  {/* Subject and Grade Grid */}
+                  <Grid cols={1} smCols={2} gap={4}>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Subject / Topic</label>
+                      <Input 
+                        type="text" 
+                        placeholder="e.g. Mathematics, computer Science" 
+                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
+                        {...register('subject')}
+                      />
+                      {errors.subject && (
+                        <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                          <AlertCircle className="h-3.5 w-3.5" /> {errors.subject.message}
+                        </span>
                       )}
-                    >
-                      {count}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
 
-            <Button 
-              variant="gradient" 
-              size="lg" 
-              className="w-full py-6 rounded-xl shadow-glow-strong text-sm font-bold active:scale-[0.98] transition-transform duration-100"
-              onClick={handleGenerate}
-            >
-              <Sparkles className="h-4.5 w-4.5 mr-2 animate-pulse" /> Start AI Formulation
-            </Button>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Class / Grade Level</label>
+                      <Input 
+                        type="text" 
+                        placeholder="e.g. Grade 10-A, Junior Web Devs" 
+                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
+                        {...register('classGrade')}
+                      />
+                      {errors.classGrade && (
+                        <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                          <AlertCircle className="h-3.5 w-3.5" /> {errors.classGrade.message}
+                        </span>
+                      )}
+                    </div>
+                  </Grid>
+
+                  {/* Due Date Picker */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5 text-primary" /> Due Date Picker
+                    </label>
+                    <Input 
+                      type="date" 
+                      className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all w-full select-none"
+                      {...register('dueDate')}
+                    />
+                    {errors.dueDate && (
+                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> {errors.dueDate.message}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* STEP 2: SCHEMA CONFIGURATIONS */}
+            {currentStep === 1 && (
+              <div className="space-y-6">
+                {/* Question Formats Checkbox Grid */}
+                <Card glass className="border border-border/40 shadow-lg">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
+                      <ListTodo className="h-5 w-5 text-accent" />
+                      Question Formats
+                    </CardTitle>
+                    <CardDescription className="text-xs">Specify question types included in the assignment sheets.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {[
+                        { id: 'mcq', label: 'Multiple Choice (MCQ)', icon: BookOpen, color: 'text-primary' },
+                        { id: 'coding', label: 'Coding Challenge', icon: Code, color: 'text-accent' },
+                        { id: 'short-answer', label: 'Short Answers', icon: ListTodo, color: 'text-emerald-500' }
+                      ].map((type) => {
+                        const isSelected = (watchedFields.questionTypes || []).includes(type.id);
+                        const Icon = type.icon;
+                        return (
+                          <div 
+                            key={type.id}
+                            onClick={() => toggleType(type.id)}
+                            className={cn(
+                              "p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all duration-200 select-none",
+                              isSelected
+                                ? "bg-muted/30 border-primary text-foreground shadow-sm font-semibold"
+                                : "bg-card/40 border-border hover:bg-muted/20 text-muted-foreground"
+                            )}
+                          >
+                            <span className="flex items-center gap-2 text-xs">
+                              <Icon className={cn("h-4.5 w-4.5 shrink-0", type.color)} /> {type.label}
+                            </span>
+                            <div className={cn(
+                              "h-5 w-5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                              isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 bg-background"
+                            )}>
+                              {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {errors.questionTypes && (
+                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> {errors.questionTypes.message}
+                      </span>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Counts and Marks Row */}
+                <Grid cols={1} smCols={2} gap={4}>
+                  <Card glass className="border border-border/40 shadow-lg">
+                    <CardHeader className="p-5">
+                      <CardTitle className="text-base font-bold">Total Questions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5 pt-0 space-y-4">
+                      <div className="flex justify-between items-center text-xs font-bold font-mono">
+                        <span className="text-muted-foreground">COUNT RANGE:</span>
+                        <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">{watchedFields.numberOfQuestions || 10}</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="5"
+                        max="50"
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                        value={watchedFields.numberOfQuestions || 10}
+                        onChange={(e) => setValue('numberOfQuestions', parseInt(e.target.value), { shouldValidate: true })}
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
+                        <span>Min: 5</span>
+                        <span>Max: 50</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card glass className="border border-border/40 shadow-lg">
+                    <CardHeader className="p-5">
+                      <CardTitle className="text-base font-bold">Total Marks</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5 pt-0 space-y-4">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Scoring Weight (Pts)</label>
+                      <Input 
+                        type="number" 
+                        placeholder="e.g. 50, 100" 
+                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all font-mono font-bold"
+                        value={watchedFields.marks || 20}
+                        onChange={(e) => setValue('marks', parseInt(e.target.value) || 0, { shouldValidate: true })}
+                      />
+                      {errors.marks && (
+                        <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                          <AlertCircle className="h-3.5 w-3.5" /> {errors.marks.message}
+                        </span>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* Difficulty range distribution sliders */}
+                <Card glass className="border border-border/40 shadow-lg">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-base font-bold">Difficulty Distribution</CardTitle>
+                    <CardDescription className="text-xs">Adjust percentages to exactly equal 100% total weight.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0 space-y-5">
+                    {/* Balanced Total indicator */}
+                    {errors.difficultyDistribution?.beginner && (
+                      <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold flex items-center gap-2 animate-pulse">
+                        <AlertCircle className="h-4.5 w-4.5 shrink-0" /> {(errors.difficultyDistribution?.beginner as any)?.message}
+                      </div>
+                    )}
+                    
+                    {/* Total balance meter */}
+                    <div className="bg-muted/20 p-4 rounded-xl border border-border/40 flex justify-between items-center text-xs font-bold font-mono select-none">
+                      <span className="text-muted-foreground">TOTAL ALLOCATION SUM:</span>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-white shadow-sm font-extrabold",
+                        ((watchedFields.difficultyDistribution?.beginner || 0) + 
+                         (watchedFields.difficultyDistribution?.intermediate || 0) + 
+                         (watchedFields.difficultyDistribution?.expert || 0)) === 100
+                          ? "bg-emerald-500" 
+                          : "bg-destructive animate-pulse"
+                      )}>
+                        {(watchedFields.difficultyDistribution?.beginner || 0) + 
+                         (watchedFields.difficultyDistribution?.intermediate || 0) + 
+                         (watchedFields.difficultyDistribution?.expert || 0)}%
+                      </span>
+                    </div>
+
+                    {/* Beginners */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Beginner Weight</span>
+                        <span className="font-mono font-bold text-foreground">{watchedFields.difficultyDistribution?.beginner || 30}%</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="0"
+                        max="100"
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        value={watchedFields.difficultyDistribution?.beginner || 30}
+                        onChange={(e) => handleDifficultyChange('beginner', parseInt(e.target.value))}
+                      />
+                    </div>
+
+                    {/* Intermediate */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Intermediate Weight</span>
+                        <span className="font-mono font-bold text-foreground">{watchedFields.difficultyDistribution?.intermediate || 50}%</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="0"
+                        max="100"
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                        value={watchedFields.difficultyDistribution?.intermediate || 50}
+                        onChange={(e) => handleDifficultyChange('intermediate', parseInt(e.target.value))}
+                      />
+                    </div>
+
+                    {/* Expert */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Expert Weight</span>
+                        <span className="font-mono font-bold text-foreground">{watchedFields.difficultyDistribution?.expert || 20}%</span>
+                      </div>
+                      <input 
+                        type="range"
+                        min="0"
+                        max="100"
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-amber-500"
+                        value={watchedFields.difficultyDistribution?.expert || 20}
+                        onChange={(e) => handleDifficultyChange('expert', parseInt(e.target.value))}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* STEP 3: REFERENCE ASSETS & RULES */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                {/* File Upload drag area */}
+                <Card glass className="border border-border/40 shadow-lg">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
+                      <UploadCloud className="h-5 w-5 text-primary" />
+                      Reference Materials Upload
+                    </CardTitle>
+                    <CardDescription className="text-xs">Submit guidelines, syllabi, or mock sheets (Max 5MB).</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0 space-y-4">
+                    <div 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleFileDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-8 border-2 border-dashed border-border/60 hover:border-primary/50 bg-muted/5 hover:bg-muted/10 rounded-2xl cursor-pointer text-center space-y-3 transition-colors select-none"
+                    >
+                      <input 
+                        type="file" 
+                        ref={fileInputRef}
+                        className="hidden" 
+                        accept=".pdf,.txt,.md,.docx"
+                        onChange={handleFileSelect}
+                      />
+                      <UploadCloud className="h-10 w-10 text-muted-foreground/60 mx-auto animate-pulse" />
+                      <div className="space-y-1">
+                        <Text className="text-xs font-semibold text-foreground">Drag and drop file here, or click to browse</Text>
+                        <Text className="text-[10px] text-muted-foreground">Supported extensions: PDF, TXT, MD, DOCX (Max 5MB)</Text>
+                      </div>
+                    </div>
+
+                    {errors.file && (
+                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> {(errors.file?.message as any)}
+                      </span>
+                    )}
+
+                    {/* Progress tracking sheet */}
+                    {fileName && (
+                      <div className="p-4 rounded-xl border border-border/40 bg-muted/20 space-y-3 shadow-inner">
+                        <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-4.5 w-4.5 text-primary shrink-0" />
+                            <span className="font-semibold truncate text-foreground text-[11px]">{fileName}</span>
+                            <span className="text-[9px] text-muted-foreground font-mono">({Math.round((fileSize || 0) / 1024)} KB)</span>
+                          </div>
+                          
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={removeFile}
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        
+                        {/* Progress slider bar */}
+                        {uploadProgress < 100 ? (
+                          <div className="space-y-1.5">
+                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-primary transition-all duration-100" style={{ width: `${uploadProgress}%` }} />
+                            </div>
+                            <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                              <span>UPLOADING REFERENCES...</span>
+                              <span>{uploadProgress}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[10px] text-emerald-500 font-bold font-mono">
+                            <Check className="h-4 w-4 stroke-[3]" /> UPLOAD COMPLETE & SECURED
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Additional instructions */}
+                <Card glass className="border border-border/40 shadow-lg">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-base font-bold text-foreground">Additional Instructions</CardTitle>
+                    <CardDescription className="text-xs">Provide special guidelines, coding rules, or exam terms.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0">
+                    <textarea 
+                      placeholder="e.g. Write clean ES6 code; focus on virtual DOM concepts; no external library helpers allowed..." 
+                      className="w-full h-28 rounded-xl border border-input p-3.5 text-xs bg-card/10 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200 resize-none leading-relaxed text-foreground"
+                      {...register('additionalInstructions')}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
-        </Grid>
+
+          {/* Navigation Controls Toolbar */}
+          <div className="flex justify-between items-center gap-3 pt-6 border-t border-border/20 mt-6 select-none">
+            {/* Draft saved tag indicator */}
+            <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+              <Check className="h-3.5 w-3.5 text-emerald-500" /> DRAFT AUTO-SAVED
+            </span>
+            
+            <div className="flex items-center gap-2">
+              {currentStep > 0 && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  className="rounded-xl px-4 py-5 font-bold flex items-center gap-1 text-xs"
+                  onClick={() => setStep(currentStep - 1)}
+                >
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </Button>
+              )}
+
+              {currentStep < 2 ? (
+                <Button 
+                  type="button" 
+                  variant="gradient" 
+                  size="sm" 
+                  className="rounded-xl px-5 py-5 font-bold flex items-center gap-1 text-xs shadow-md"
+                  onClick={handleNext}
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  variant="gradient" 
+                  size="sm" 
+                  disabled={!isValid}
+                  className="rounded-xl px-6 py-5 font-bold flex items-center gap-1.5 text-xs shadow-glow-strong disabled:opacity-50"
+                >
+                  <Sparkles className="h-4.5 w-4.5 mr-1 animate-pulse" /> Start AI Generation
+                </Button>
+              )}
+            </div>
+          </div>
+        </form>
       </Container>
     </Section>
   );
