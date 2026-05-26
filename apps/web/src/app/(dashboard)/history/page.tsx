@@ -1,5 +1,6 @@
 "use client";
 
+import type { Assessment } from "@veda-ai/types";
 import * as React from "react";
 import Link from "next/link";
 import { Heading, Text } from "@/components/ui/typography";
@@ -42,69 +43,12 @@ import {
 } from "lucide-react";
 
 // Initial historical data
-const initialAssessments = [
-  {
-    id: "react-fundamentals",
-    title: "React Fundamentals",
-    description: "Covers hooks, virtual DOM, and component lifecycles.",
-    difficulty: "intermediate",
-    questions: 10,
-    created: "2026-05-24",
-    averageScore: "88%",
-    submissions: 24,
-  },
-  {
-    id: "express-api-engineering",
-    title: "Express API Engineering",
-    description: "Middleware routing, rate limiters, and error handlers.",
-    difficulty: "expert",
-    questions: 15,
-    created: "2026-05-22",
-    averageScore: "74%",
-    submissions: 18,
-  },
-  {
-    id: "mongodb-schema-modeling",
-    title: "MongoDB Schema Modeling",
-    description: "Document structures, indexing strategies, and pipelines.",
-    difficulty: "beginner",
-    questions: 8,
-    created: "2026-05-19",
-    averageScore: "91%",
-    submissions: 32,
-  },
-  {
-    id: "typescript-generics",
-    title: "TypeScript Generics & Types",
-    description: "Mapped types, conditional types, and utility overrides.",
-    difficulty: "expert",
-    questions: 12,
-    created: "2026-05-15",
-    averageScore: "81%",
-    submissions: 15,
-  },
-  {
-    id: "css-grid-flexbox",
-    title: "Modern CSS Grid & Flexbox",
-    description: "Responsive alignment rulers and absolute grid layers.",
-    difficulty: "beginner",
-    questions: 10,
-    created: "2026-05-10",
-    averageScore: "95%",
-    submissions: 41,
-  },
-  {
-    id: "nextjs-server-actions",
-    title: "Next.js Server Actions & SSR",
-    description: "Data mutations, hydration states, and caching strategies.",
-    difficulty: "intermediate",
-    questions: 14,
-    created: "2026-05-05",
-    averageScore: "83%",
-    submissions: 20,
-  }
-];
+interface ExtendedAssessment extends Assessment {
+  averageScore: string;
+  submissions: number;
+}
 
+// Initial historical data satisfying Assessment and ExtendedAssessment types
 // Visual Empty State Illustration (matching Panel 1 in Mockups)
 const EmptyStateIllustration = () => (
   <div className="relative w-44 h-44 mx-auto flex items-center justify-center mb-2">
@@ -133,28 +77,41 @@ const EmptyStateIllustration = () => (
   </div>
 );
 
+import { useAssessmentStore } from "@/store";
+
 export default function HistoryPage() {
   const { toast } = useToast();
-  const [assessments, setAssessments] = React.useState(initialAssessments);
+  const assessments = useAssessmentStore((state) => state.assessments);
+  const removeAssessmentAsync = useAssessmentStore((state) => state.removeAssessmentAsync);
+
   const [searchQuery, setSearchQuery] = React.useState("");
   const [difficultyFilter, setDifficultyFilter] = React.useState("all");
 
   // Filter listings
-  const filteredAssessments = assessments.filter((item) => {
+  const filteredAssessments = (assessments as ExtendedAssessment[]).filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDiff = difficultyFilter === "all" || item.difficulty === difficultyFilter;
+                          (item.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const difficultyTag = item.tags[0] || "intermediate";
+    const matchesDiff = difficultyFilter === "all" || difficultyTag === difficultyFilter;
     return matchesSearch && matchesDiff;
   });
 
-  const handleDelete = (id: string) => {
-    const target = assessments.find((a) => a.id === id);
-    setAssessments(assessments.filter((a) => a.id !== id));
-    toast({
-      title: "Assessment Deleted",
-      description: `'${target?.title}' catalog entry has been removed.`,
-      variant: "destructive",
-    });
+  const handleDelete = async (id: string) => {
+    const target = assessments.find((a) => a._id === id);
+    try {
+      await removeAssessmentAsync(id);
+      toast({
+        title: "Assessment Deleted",
+        description: `'${target?.title || "Assessment"}' catalog entry has been removed.`,
+        variant: "destructive",
+      });
+    } catch (error) {
+      toast({
+        title: "Action Failed",
+        description: error instanceof Error ? error.message : "Simulated network delete error. Reverted visual state.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -213,6 +170,7 @@ export default function HistoryPage() {
         {filteredAssessments.length > 0 ? (
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredAssessments.map((assessment) => {
+              const difficultyTag = assessment.tags[0] || "intermediate";
               const diffColors = {
                 beginner: "success" as const,
                 intermediate: "info" as const,
@@ -220,7 +178,7 @@ export default function HistoryPage() {
               };
 
               return (
-                <StaggerChild key={assessment.id}>
+                <StaggerChild key={assessment._id}>
                   <Card glass hover className="h-full flex flex-col justify-between border border-border/40 shadow-sm hover:shadow-glow transition-all duration-300">
                     <CardHeader className="p-5 pb-2 flex-row justify-between items-start space-y-0 gap-3">
                       <div className="space-y-1 min-w-0">
@@ -231,29 +189,29 @@ export default function HistoryPage() {
                           {assessment.description}
                         </CardDescription>
                       </div>
-                      <Badge variant={diffColors[assessment.difficulty as keyof typeof diffColors]} className="text-[9px] uppercase tracking-wider px-2 py-0.5 shrink-0">
-                        {assessment.difficulty}
+                      <Badge variant={diffColors[difficultyTag as keyof typeof diffColors]} className="text-[9px] uppercase tracking-wider px-2 py-0.5 shrink-0">
+                        {difficultyTag}
                       </Badge>
                     </CardHeader>
 
                     <CardContent className="p-5 pt-0 pb-4 flex flex-col gap-2 text-[11px] text-muted-foreground font-medium border-b border-border/10">
                       <span className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4 opacity-70 text-primary shrink-0" />
-                        {assessment.questions} Questions Formulated
+                        {assessment.questions.length} Questions Formulated
                       </span>
                       <span className="flex items-center gap-2">
                         <Users className="h-4 w-4 opacity-70 text-accent shrink-0" />
-                        {assessment.submissions} candidate submissions
+                        {assessment.submissions || 0} candidate submissions
                       </span>
                       <span className="flex items-center gap-2">
                         <Clock className="h-4 w-4 opacity-70 text-muted-foreground shrink-0" />
-                        Compiled on {assessment.created}
+                        Compiled on {assessment.createdAt ? new Date(assessment.createdAt).toISOString().split('T')[0] : "N/A"}
                       </span>
                     </CardContent>
 
                     <CardFooter className="p-4 justify-between items-center text-xs mt-auto bg-muted/10 h-12 rounded-b-xl">
                       <span className="text-[11px] text-muted-foreground">
-                        Avg Grade: <strong className="text-foreground">{assessment.averageScore}</strong>
+                        Avg Grade: <strong className="text-foreground">{assessment.averageScore || "0%"}</strong>
                       </span>
                       
                       <div className="flex items-center gap-2">
@@ -278,7 +236,7 @@ export default function HistoryPage() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction 
-                                onClick={() => handleDelete(assessment.id)}
+                                onClick={() => handleDelete(assessment._id)}
                                 className="bg-destructive hover:bg-destructive/90 text-white"
                               >
                                 Delete
@@ -288,7 +246,7 @@ export default function HistoryPage() {
                         </AlertDialog>
 
                         {/* Review trigger */}
-                        <Link href={`/preview/${assessment.id}`}>
+                        <Link href={`/preview/${assessment._id}`}>
                           <Button variant="ghost" size="sm" className="h-8 text-xs font-semibold px-2.5 hover:bg-primary/10 hover:text-primary rounded-md flex items-center gap-1">
                             <Eye className="h-4 w-4" /> Preview
                           </Button>

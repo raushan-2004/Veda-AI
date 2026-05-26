@@ -8,24 +8,24 @@ export async function connectRedis(): Promise<void> {
   redis = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
     retryStrategy: (times) => {
-      if (times > 5) {
-        console.error('Redis: Max retry attempts reached');
-        return null;
+      if (times > 3) {
+        return null; // Stop retrying quickly to allow graceful fallback
       }
-      return Math.min(times * 200, 2000);
+      return Math.min(times * 200, 1000);
     },
     lazyConnect: true,
   });
 
-  await redis.connect();
-
+  // Register event listeners BEFORE connecting to avoid process crashes on unhandled error events
   redis.on('error', (error) => {
-    console.error('Redis error:', error);
+    console.warn('🔌 Redis connection warning:', error.message);
   });
 
   redis.on('reconnecting', () => {
     console.warn('Redis reconnecting...');
   });
+
+  await redis.connect();
 }
 
 export function getRedis(): Redis {

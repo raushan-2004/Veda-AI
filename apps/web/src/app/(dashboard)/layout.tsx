@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/hooks/use-theme";
+import { useUIStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/ui/motion";
 import {
@@ -56,6 +57,9 @@ export default function DashboardLayout({
   const { theme, setTheme } = useTheme();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
+  const isSidebarCollapsed = useUIStore((state) => state.isSidebarCollapsed);
+  const toggleSidebarCollapsed = useUIStore((state) => state.toggleSidebarCollapsed);
+
   // Parse path for breadcrumbs
   const getBreadcrumbs = () => {
     const parts = pathname.split("/").filter(Boolean);
@@ -79,19 +83,27 @@ export default function DashboardLayout({
       <div className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full bg-veda-indigo-500/5 blur-[130px] pointer-events-none" />
 
       {/* --- DESKTOP SIDEBAR --- */}
-      <aside className="hidden lg:flex w-64 border-r border-border/40 bg-card/40 backdrop-blur-md flex-col shrink-0 sticky top-0 h-screen z-30">
+      <aside className={cn(
+        "hidden lg:flex border-r border-border/40 bg-card/40 backdrop-blur-md flex-col shrink-0 sticky top-0 h-screen z-30 transition-all duration-300",
+        isSidebarCollapsed ? "w-20" : "w-64"
+      )}>
         {/* Brand Header */}
-        <div className="h-16 px-6 border-b border-border/40 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 flex items-center justify-center text-white shadow-md shadow-veda-purple-500/10">
+        <div className={cn(
+          "h-16 border-b border-border/40 flex items-center gap-2 transition-all duration-300",
+          isSidebarCollapsed ? "px-5 justify-center" : "px-6"
+        )}>
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 flex items-center justify-center text-white shadow-md shadow-veda-purple-500/10 shrink-0">
             <Sparkles className="h-4.5 w-4.5" />
           </div>
-          <span className="font-bold text-base tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-veda-purple-500 to-veda-indigo-500">
-            Veda AI
-          </span>
+          {!isSidebarCollapsed && (
+            <span className="font-bold text-base tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-veda-purple-500 to-veda-indigo-500 animate-in fade-in duration-200">
+              Veda AI
+            </span>
+          )}
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className={cn("flex-1 py-6 space-y-1 transition-all duration-300", isSidebarCollapsed ? "px-2.5" : "px-4")}>
           {sidebarLinks.map((link) => {
             const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(link.href));
             const LinkIcon = link.icon;
@@ -99,46 +111,69 @@ export default function DashboardLayout({
             return (
               <Link key={link.name} href={link.href}>
                 <span
+                  title={isSidebarCollapsed ? link.name : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group active:scale-[0.98]",
+                    "flex items-center rounded-lg text-sm font-medium transition-all duration-200 group active:scale-[0.98]",
+                    isSidebarCollapsed ? "justify-center px-0 py-3 h-11 w-11 mx-auto" : "gap-3 px-3 py-2.5 h-10",
                     isActive
                       ? "bg-primary/10 border-l-2 border-primary text-primary shadow-inner-sm"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   )}
                 >
-                  <LinkIcon className={cn("h-4.5 w-4.5 transition-transform duration-200", !isActive && "group-hover:scale-105")} />
-                  {link.name}
+                  <LinkIcon className={cn("h-4.5 w-4.5 transition-transform duration-200 shrink-0", !isActive && "group-hover:scale-105")} />
+                  {!isSidebarCollapsed && (
+                    <span className="animate-in fade-in duration-200 truncate">{link.name}</span>
+                  )}
                 </span>
               </Link>
             );
           })}
+
+          {/* Collapse/Expand Toggle Button */}
+          <div className="pt-2 border-t border-border/10">
+            <button
+              onClick={toggleSidebarCollapsed}
+              className={cn(
+                "flex items-center rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-200 w-full active:scale-[0.98]",
+                isSidebarCollapsed ? "justify-center py-3 h-11 w-11 mx-auto" : "gap-3 px-3 py-2.5 h-10"
+              )}
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              <div className={cn("transition-transform duration-300 shrink-0", isSidebarCollapsed && "rotate-180")}>
+                <ChevronRight className="h-4.5 w-4.5" />
+              </div>
+              {!isSidebarCollapsed && <span className="truncate">Collapse Sidebar</span>}
+            </button>
+          </div>
         </nav>
 
         {/* User Profile Footer */}
-        <div className="p-4 border-t border-border/40 bg-muted/10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+        <div className={cn("border-t border-border/40 bg-muted/10 transition-all duration-300", isSidebarCollapsed ? "p-2.5" : "p-4")}>
+          <div className={cn("flex items-center justify-between", isSidebarCollapsed ? "flex-col gap-3 justify-center" : "flex-row")}>
+            <div className={cn("flex items-center gap-3", isSidebarCollapsed ? "justify-center" : "")}>
+              <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-veda-purple-500 to-veda-indigo-500 flex items-center justify-center text-white font-bold text-sm shadow-sm shrink-0">
                 R
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-semibold leading-none truncate text-foreground">
-                  Raushan Kumar
-                </span>
-                <span className="text-[10px] text-muted-foreground leading-none mt-1 truncate">
-                  raushan@veda.ai
-                </span>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col min-w-0 animate-in fade-in duration-200">
+                  <span className="text-xs font-semibold leading-none truncate text-foreground">
+                    Raushan Kumar
+                  </span>
+                  <span className="text-[10px] text-muted-foreground leading-none mt-1 truncate">
+                    raushan@veda.ai
+                  </span>
+                </div>
+              )}
             </div>
             
-            <Link href="/">
+            <Link href="/" className={isSidebarCollapsed ? "w-full flex justify-center" : ""}>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors active:scale-95"
                 title="Log out"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4 shrink-0" />
               </Button>
             </Link>
           </div>

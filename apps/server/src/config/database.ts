@@ -6,6 +6,9 @@ export async function connectDB(): Promise<void> {
   try {
     mongoose.set('strictQuery', true);
 
+    const maskedUri = env.MONGODB_URI.replace(/:([^:@]+)@/, ':****@');
+    console.info(`🔌 Connecting to MongoDB: ${maskedUri}`);
+
     await mongoose.connect(env.MONGODB_URI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,

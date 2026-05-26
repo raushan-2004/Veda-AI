@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import type { Assessment } from "@veda-ai/types";
+import { useAssessmentStore } from "@/store";
 import Link from "next/link";
 import { Heading, Text } from "@/components/ui/typography";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -25,41 +27,15 @@ import {
   History
 } from "lucide-react";
 
-// Mock recent assessments data
-const recentAssessments = [
-  {
-    id: "react-basics",
-    title: "React Fundamentals",
-    description: "Covers hooks, virtual DOM, and component lifecycles.",
-    difficulty: "intermediate",
-    questions: 10,
-    created: "2 hours ago",
-    averageScore: "88%",
-    submissions: 24,
-  },
-  {
-    id: "node-apis",
-    title: "Express API Engineering",
-    description: "Middleware routing, rate limiters, and error handlers.",
-    difficulty: "expert",
-    questions: 15,
-    created: "2 days ago",
-    averageScore: "74%",
-    submissions: 18,
-  },
-  {
-    id: "mongo-intro",
-    title: "MongoDB Schema Modeling",
-    description: "Document structures, indexing strategies, and pipelines.",
-    difficulty: "beginner",
-    questions: 8,
-    created: "5 days ago",
-    averageScore: "91%",
-    submissions: 32,
-  },
-];
+interface ExtendedAssessment extends Assessment {
+  averageScore: string;
+  submissions: number;
+}
 
 export default function DashboardPage() {
+  const assessments = useAssessmentStore((state) => state.assessments);
+  const recentAssessments = (assessments as ExtendedAssessment[]).slice(0, 3);
+
   // Determine greeting based on local time
   const getGreeting = () => {
     const hr = new Date().getHours();
@@ -183,6 +159,7 @@ export default function DashboardPage() {
 
             <StaggerContainer className="space-y-3">
               {recentAssessments.map((assessment) => {
+                const difficultyTag = assessment.tags[0] || "intermediate";
                 const diffBadges = {
                   beginner: "success" as const,
                   intermediate: "info" as const,
@@ -190,7 +167,7 @@ export default function DashboardPage() {
                 };
 
                 return (
-                  <StaggerChild key={assessment.id}>
+                  <StaggerChild key={assessment._id}>
                     <Card glass hover className="border border-border/40 shadow-sm hover:shadow-glow transition-all duration-300">
                       <CardHeader className="p-5 pb-2 flex-row justify-between items-start space-y-0 gap-3">
                         <div className="space-y-1 min-w-0">
@@ -201,29 +178,29 @@ export default function DashboardPage() {
                             {assessment.description}
                           </CardDescription>
                         </div>
-                        <Badge variant={diffBadges[assessment.difficulty as keyof typeof diffBadges]} className="text-[9px] uppercase tracking-wider px-2 py-0.5">
-                          {assessment.difficulty}
+                        <Badge variant={diffBadges[difficultyTag as keyof typeof diffBadges]} className="text-[9px] uppercase tracking-wider px-2 py-0.5">
+                          {difficultyTag}
                         </Badge>
                       </CardHeader>
                       <CardContent className="p-5 pt-0 pb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground font-medium border-b border-border/10">
                         <span className="flex items-center gap-1.5">
                           <BookOpen className="h-4 w-4 opacity-70 text-primary shrink-0" />
-                          {assessment.questions} Questions
+                          {assessment.questions.length} Questions
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Users className="h-4 w-4 opacity-70 text-accent shrink-0" />
-                          {assessment.submissions} submissions
+                          {assessment.submissions || 0} submissions
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Clock className="h-4 w-4 opacity-70 text-muted-foreground shrink-0" />
-                          {assessment.created}
+                          {assessment.createdAt ? new Date(assessment.createdAt).toISOString().split('T')[0] : "N/A"}
                         </span>
                       </CardContent>
                       <CardFooter className="p-4 justify-between items-center text-xs mt-auto bg-muted/10 h-12 rounded-b-xl">
                         <span className="text-[11px] text-muted-foreground">
-                          Avg Grade: <strong className="text-foreground">{assessment.averageScore}</strong>
+                          Avg Grade: <strong className="text-foreground">{assessment.averageScore || "0%"}</strong>
                         </span>
-                        <Link href={`/preview/${assessment.id}`}>
+                        <Link href={`/preview/${assessment._id}`}>
                           <Button variant="ghost" size="sm" className="h-8 text-xs font-semibold px-2.5 hover:bg-primary/10 hover:text-primary rounded-md flex items-center gap-1">
                             Review <ArrowUpRight className="h-4 w-4" />
                           </Button>

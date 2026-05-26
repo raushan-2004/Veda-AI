@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './dotenv-init';
 import { createServer } from 'http';
 
 import { app } from './app';
@@ -16,8 +16,12 @@ async function bootstrap() {
     console.info('✅ MongoDB connected');
 
     // Connect to Redis
-    await connectRedis();
-    console.info('✅ Redis connected');
+    try {
+      await connectRedis();
+      console.info('✅ Redis connected');
+    } catch (redisError) {
+      console.warn('⚠️ Redis connection failed. Local BullMQ background queues will run in fallback/retry mode. Ensure Redis is running locally if queue features are required.');
+    }
 
     // Create HTTP server
     const httpServer = createServer(app);
