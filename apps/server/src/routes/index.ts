@@ -1,18 +1,12 @@
 import { Router } from 'express';
-
-// Import route modules (add as you build them)
-// import { authRouter } from './auth';
-// import { assessmentRouter } from './assessments';
-// import { submissionRouter } from './submissions';
-// import { userRouter } from './users';
+import { authRouter } from './auth.routes';
+import { assessmentRouter } from './assessment.routes';
 
 export const apiRouter = Router();
 
 // ==================== Route Mounting ====================
-// apiRouter.use('/auth', authRouter);
-// apiRouter.use('/assessments', assessmentRouter);
-// apiRouter.use('/submissions', submissionRouter);
-// apiRouter.use('/users', userRouter);
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/assessments', assessmentRouter);
 
 // ==================== API Status ====================
 apiRouter.get('/', (_req, res) => {

@@ -1,4 +1,4 @@
-import { Server as HttpServer } from 'http';
+import type { Server as HttpServer } from 'http';
 
 import { Server } from 'socket.io';
 
