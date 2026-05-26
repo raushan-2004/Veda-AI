@@ -2,6 +2,7 @@
   "name": "veda-ai",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "npm@10.0.0",
   "description": "Veda AI — AI Assessment Creator Platform",
   "workspaces": [
     "apps/*",
@@ -17,14 +18,12 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\" --ignore-path .prettierignore",
-    "clean": "turbo run clean && rm -rf node_modules",
-    "prepare": "husky"
+    "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.3.0",
     "@commitlint/config-conventional": "^19.2.2",
     "eslint": "^8.57.0",
-    "husky": "^9.1.4",
     "lint-staged": "^15.2.7",
     "prettier": "^3.3.3",
     "turbo": "^2.0.12",

@@ -59,9 +59,11 @@ export function useSocket(token?: string) {
       event: E,
       handler: ServerToClientEvents[E]
     ) => {
-      socketRef.current?.on(event as string, handler as (...args: unknown[]) => void);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (socketRef.current as any)?.on(event, handler);
       return () => {
-        socketRef.current?.off(event as string, handler as (...args: unknown[]) => void);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (socketRef.current as any)?.off(event, handler);
       };
     },
     []

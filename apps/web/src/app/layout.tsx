@@ -44,6 +44,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { ThemeProvider } from '@/components/providers/theme-provider';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -52,7 +54,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        {children}
+        <ThemeProvider defaultTheme="dark" storageKey="veda-ui-theme">
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

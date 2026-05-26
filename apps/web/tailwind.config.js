@@ -79,6 +79,14 @@ module.exports = {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'monospace'],
       },
+      boxShadow: {
+        'glow': '0 0 20px rgba(168, 85, 247, 0.15)',
+        'glow-strong': '0 0 25px rgba(168, 85, 247, 0.35)',
+        'glass-shadow': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+      },
+      transitionTimingFunction: {
+        'bounce-out': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+      },
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
