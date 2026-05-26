@@ -23,6 +23,7 @@ const EnvSchema = z.object({
 
   // AI
   GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-1.5-flash-latest'),
   OPENAI_API_KEY: z.string().optional(),
 });
 

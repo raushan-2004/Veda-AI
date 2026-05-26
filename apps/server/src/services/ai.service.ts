@@ -113,7 +113,8 @@ IMPORTANT: Never wrap the JSON in Markdown code blocks (like \`\`\`json ... \`\`
     }
 
     const prompt = this.assemblePrompt(subject, topic, grade, numQuestions, formats);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const model = env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const payload = {
       contents: [
         {

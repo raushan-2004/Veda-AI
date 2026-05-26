@@ -7,6 +7,8 @@ export const assessmentRouter = Router();
 
 assessmentRouter.get('/', assessmentController.getAll);
 assessmentRouter.get('/:id', assessmentController.getById);
+assessmentRouter.get('/:id/download', assessmentController.download);
 assessmentRouter.post('/', validate(CreateAssessmentSchema), assessmentController.create);
+assessmentRouter.post('/:id/regenerate', assessmentController.regenerate);
 
 export default assessmentRouter;

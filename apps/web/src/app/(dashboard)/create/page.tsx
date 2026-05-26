@@ -183,7 +183,8 @@ export default function CreateAssignmentPage() {
   };
 
   // Pagination navigation checks
-  const handleNext = async () => {
+  const handleNext = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     let fieldsToValidate: Array<keyof AssignmentFormData> = [];
     if (currentStep === 0) {
       fieldsToValidate = ['title', 'subject', 'classGrade', 'dueDate'];
@@ -373,20 +374,44 @@ export default function CreateAssignmentPage() {
           
           {/* Progress Indicators */}
           <div className="flex items-center gap-2 bg-muted/20 p-1.5 rounded-xl border border-border/40 self-start sm:self-auto text-xs font-bold text-muted-foreground select-none">
-            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 0 ? "bg-background text-foreground shadow-sm" : "")}>
-              1. Basics
-            </span>
-            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 1 ? "bg-background text-foreground shadow-sm" : "")}>
-              2. Schema
-            </span>
-            <span className={cn("px-3 py-1.5 rounded-lg transition-colors", currentStep === 2 ? "bg-background text-foreground shadow-sm" : "")}>
-              3. Assets
-            </span>
+            {[
+              { idx: 0, label: "1. Basics" },
+              { idx: 1, label: "2. Schema" },
+              { idx: 2, label: "3. Assets" }
+            ].map((step) => {
+              const isActive = currentStep === step.idx;
+              const isPast = currentStep > step.idx;
+              return (
+                <span
+                  key={step.idx}
+                  onClick={() => {
+                    if (isPast || isActive) {
+                      setStep(step.idx);
+                    }
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg transition-colors duration-150",
+                    isActive ? "bg-background text-foreground shadow-sm" : "",
+                    isPast ? "cursor-pointer hover:bg-background/40 hover:text-foreground text-muted-foreground/80" : "opacity-50"
+                  )}
+                >
+                  {step.label}
+                </span>
+              );
+            })}
           </div>
         </div>
 
         {/* Assignment Creation Form Content */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 flex-1 flex flex-col justify-between">
+        <form 
+          onSubmit={handleSubmit(onSubmit)} 
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+              e.preventDefault();
+            }
+          }}
+          className="space-y-6 flex-1 flex flex-col justify-between"
+        >
           <div className="space-y-6">
             {/* STEP 1: CORE PARAMETERS */}
             {currentStep === 0 && (
@@ -773,6 +798,7 @@ export default function CreateAssignmentPage() {
 
               {currentStep < 2 ? (
                 <Button 
+                  key="next-btn"
                   type="button" 
                   variant="gradient" 
                   size="sm" 
@@ -783,6 +809,7 @@ export default function CreateAssignmentPage() {
                 </Button>
               ) : (
                 <Button 
+                  key="submit-btn"
                   type="submit" 
                   variant="gradient" 
                   size="sm" 

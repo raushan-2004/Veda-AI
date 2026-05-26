@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 
 import { io, type Socket } from 'socket.io-client';
 
@@ -15,7 +15,8 @@ let socketInstance: TypedSocket | null = null;
 
 function getSocket(token?: string): TypedSocket {
   if (!socketInstance) {
-    socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL!, {
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
+    socketInstance = io(socketUrl, {
       autoConnect: false,
       auth: token ? { token } : {},
       transports: ['websocket', 'polling'],
@@ -28,30 +29,22 @@ function getSocket(token?: string): TypedSocket {
 }
 
 export function useSocket(token?: string) {
-  const socketRef = useRef<TypedSocket | null>(null);
+  const socket = getSocket(token);
 
   useEffect(() => {
-    const socket = getSocket(token);
-    socketRef.current = socket;
-
     if (!socket.connected) {
       socket.connect();
     }
-
-    return () => {
-      // Don't disconnect globally — socket is a singleton
-      // Only clean up event listeners in individual hooks
-    };
-  }, [token]);
+  }, [socket]);
 
   const emit = useCallback(
     <E extends keyof ClientToServerEvents>(
       event: E,
       ...args: Parameters<ClientToServerEvents[E]>
     ) => {
-      socketRef.current?.emit(event, ...args);
+      socket.emit(event, ...args);
     },
-    []
+    [socket]
   );
 
   const on = useCallback(
@@ -60,16 +53,16 @@ export function useSocket(token?: string) {
       handler: ServerToClientEvents[E]
     ) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (socketRef.current as any)?.on(event, handler);
+      (socket as any).on(event, handler);
       return () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (socketRef.current as any)?.off(event, handler);
+        (socket as any).off(event, handler);
       };
     },
-    []
+    [socket]
   );
 
-  return { socket: socketRef.current, emit, on };
+  return { socket, emit, on };
 }
 
 export function disconnectSocket() {
