@@ -1,0 +1,89 @@
+# ==============================================
+# VEDA AI — .gitignore
+# ==============================================
+
+# ===== Dependencies =====
+node_modules/
+.npm
+.yarn/
+.pnp.*
+
+# ===== Build Outputs =====
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# ===== Environment Variables =====
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+!.env.example
+!.env.local.example
+!**/.env.example
+
+# ===== Logs =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===== OS Files =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===== IDE / Editors =====
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== Testing =====
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+e2e-results/
+
+# ===== TypeScript =====
+*.tsbuildinfo
+
+# ===== Cache =====
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# ===== Docker =====
+docker-compose.override.yml
+
+# ===== Misc =====
+*.pem
+*.key
+*.cert
+.vercel
+.netlify
