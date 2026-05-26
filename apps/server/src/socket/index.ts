@@ -12,6 +12,7 @@ import type {
 import { env } from '@/config/env';
 import { assessmentSocketHandlers } from './handlers/assessment';
 import { submissionSocketHandlers } from './handlers/submission';
+import { generationSocketHandlers } from './handlers/generation';
 
 export let io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
@@ -52,6 +53,7 @@ export function initSocket(httpServer: HttpServer): void {
     // Register event handlers
     assessmentSocketHandlers(io, socket);
     submissionSocketHandlers(io, socket);
+    generationSocketHandlers(io, socket);
 
     socket.on('disconnect', (reason) => {
       console.info(`Socket disconnected: ${socket.id} — ${reason}`);

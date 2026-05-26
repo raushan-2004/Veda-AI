@@ -30,6 +30,15 @@ export const SOCKET_EVENTS = {
 
   // Notifications
   NOTIFICATION: 'notification',
+
+  // Generation
+  GENERATION_QUEUED: 'generation:queued',
+  GENERATION_STARTED: 'generation:started',
+  GENERATION_PROGRESS: 'generation:progress',
+  GENERATION_COMPLETED: 'generation:completed',
+  GENERATION_FAILED: 'generation:failed',
+  SUBSCRIBE_GENERATION: 'generation:subscribe',
+  UNSUBSCRIBE_GENERATION: 'generation:unsubscribe',
 } as const;
 
 export type SocketEventName = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];
@@ -87,6 +96,13 @@ export interface ServerToClientEvents {
   [SOCKET_EVENTS.PARTICIPANT_SUBMITTED]: (data: { userId: string; count: number }) => void;
   [SOCKET_EVENTS.NOTIFICATION]: (data: NotificationPayload) => void;
   [SOCKET_EVENTS.PROCTORING_ALERT]: (data: ProctoringAlertPayload) => void;
+
+  // Generation
+  [SOCKET_EVENTS.GENERATION_QUEUED]: (data: { jobId: string; assessmentId: string }) => void;
+  [SOCKET_EVENTS.GENERATION_STARTED]: (data: { jobId: string; assessmentId: string }) => void;
+  [SOCKET_EVENTS.GENERATION_PROGRESS]: (data: { jobId: string; progress: number; phase: string; status: string }) => void;
+  [SOCKET_EVENTS.GENERATION_COMPLETED]: (data: { jobId: string; assessmentId: string; questionsCount: number }) => void;
+  [SOCKET_EVENTS.GENERATION_FAILED]: (data: { jobId: string; error: string }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -96,6 +112,10 @@ export interface ClientToServerEvents {
   [SOCKET_EVENTS.SUBMIT_ASSESSMENT]: (data: { submissionId: string; assessmentId: string }) => void;
   [SOCKET_EVENTS.TAB_SWITCH]: (data: { assessmentId: string; timestamp: string }) => void;
   [SOCKET_EVENTS.FULLSCREEN_EXIT]: (data: { assessmentId: string; timestamp: string }) => void;
+
+  // Generation subscriptions
+  [SOCKET_EVENTS.SUBSCRIBE_GENERATION]: (data: { jobId: string }) => void;
+  [SOCKET_EVENTS.UNSUBSCRIBE_GENERATION]: (data: { jobId: string }) => void;
 }
 
 export interface InterServerEvents {

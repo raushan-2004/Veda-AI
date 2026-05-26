@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Grid } from "@/components/layout/grid";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
-import { Loader } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
 import { AssignmentFormSchema, type AssignmentFormData } from "@/lib/schemas/assignment-form.schema";
 import { useAssignmentFormStore } from "@/store/assignment-form.store";
+import { useGenerationStore } from "@/store/generation.store";
+import { useSocket } from "@/lib/socket";
 import { 
   Sparkles, 
   Settings, 
@@ -33,14 +34,6 @@ import {
   AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const generationSteps = [
-  "Structuring topic paradigms and cognitive map...",
-  "Formulating multiple-choice context arrays...",
-  "Drafting algorithmic coding problem statements...",
-  "Compiling automatic grading schemas & unit tests...",
-  "Assembling visual quiz paper sheet..."
-];
 
 export default function CreateAssignmentPage() {
   const router = useRouter();
@@ -60,8 +53,22 @@ export default function CreateAssignmentPage() {
   } = useAssignmentFormStore();
 
   const [isGenerating, setIsGenerating] = React.useState(false);
-  const [currentStepIdx, setCurrentStepIdx] = React.useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const {
+    activeJobId,
+    generationProgress,
+    currentStatus,
+    hasFailed,
+    errorLogs,
+    startGenerationJob,
+    updateProgress,
+    failGenerationJob,
+    completeGenerationJob,
+    resetGenerationStore,
+  } = useGenerationStore();
+
+  const { socket } = useSocket();
 
   // Initialize React Hook Form
   const {
@@ -190,32 +197,104 @@ export default function CreateAssignmentPage() {
     }
   };
 
-  const onSubmit = (_data: AssignmentFormData) => {
-    setIsGenerating(true);
-    setCurrentStepIdx(0);
-  };
+  const onSubmit = async (data: AssignmentFormData) => {
+    try {
+      setIsGenerating(true);
+      resetGenerationStore();
 
-  // Timer loop for simulated AI generation progress stages
-  React.useEffect(() => {
-    if (!isGenerating) return;
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/assessments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: data.title,
+          subject: data.subject,
+          classGrade: data.classGrade,
+          dueDate: new Date(data.dueDate).toISOString(),
+          numQuestions: data.numberOfQuestions,
+          marks: data.marks,
+          difficulty: {
+            beginner: data.difficultyDistribution.beginner,
+            intermediate: data.difficultyDistribution.intermediate,
+            expert: data.difficultyDistribution.expert,
+          },
+          formats: data.questionTypes,
+          instructions: data.additionalInstructions,
+        }),
+      });
 
-    if (currentStepIdx < generationSteps.length) {
-      const timer = setTimeout(() => {
-        setCurrentStepIdx((prev) => prev + 1);
-      }, 1500);
-      return () => clearTimeout(timer);
-    } else {
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to initialize assessment generation');
+      }
+
+      const assessmentId = result.data._id;
+      const jobId = `job_${assessmentId}`;
+
+      // Start the job in store
+      startGenerationJob(jobId);
+
+      // Subscribe to the Socket room
+      if (socket) {
+        socket.emit('generation:subscribe' as any, { jobId });
+      }
+    } catch (error: any) {
       setIsGenerating(false);
       toast({
-        title: "Assignment Created!",
-        description: `'${watchedFields.title}' assignment has been formulated successfully by Veda AI.`,
-        variant: "success" as any,
+        title: "AI Generation Request Failed",
+        description: error.message,
+        variant: "destructive",
       });
-      const topicSlug = watchedFields.subject.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      resetForm();
-      router.push(`/preview/${topicSlug}`);
     }
-  }, [isGenerating, currentStepIdx, router, toast, watchedFields.title, watchedFields.subject, resetForm]);
+  };
+
+  // Setup real-time Socket.IO listeners
+  React.useEffect(() => {
+    if (!socket || !activeJobId) return;
+
+    const handleProgress = (data: { jobId: string; progress: number; phase: string; status: string }) => {
+      if (data.jobId === activeJobId) {
+        updateProgress(data.progress, data.phase);
+      }
+    };
+
+    const handleCompleted = (data: { jobId: string; assessmentId: string; questionsCount: number }) => {
+      if (data.jobId === activeJobId) {
+        completeGenerationJob();
+        toast({
+          title: "Assignment Created!",
+          description: `'${watchedFields.title}' assignment has been formulated successfully by Veda AI.`,
+          variant: "success" as any,
+        });
+        resetForm();
+        resetGenerationStore();
+        setIsGenerating(false);
+        router.push(`/preview/${data.assessmentId}`);
+      }
+    };
+
+    const handleFailed = (data: { jobId: string; error: string }) => {
+      if (data.jobId === activeJobId) {
+        failGenerationJob(data.error);
+        toast({
+          title: "AI Generation Failed",
+          description: data.error,
+          variant: "destructive",
+        });
+      }
+    };
+
+    socket.on('generation:progress' as any, handleProgress);
+    socket.on('generation:completed' as any, handleCompleted);
+    socket.on('generation:failed' as any, handleFailed);
+
+    return () => {
+      socket.off('generation:progress' as any, handleProgress);
+      socket.off('generation:completed' as any, handleCompleted);
+      socket.off('generation:failed' as any, handleFailed);
+    };
+  }, [socket, activeJobId, updateProgress, completeGenerationJob, failGenerationJob, resetGenerationStore, resetForm, router, watchedFields.title, watchedFields.subject, toast]);
 
   return (
     <Section size="sm" className="flex-1 flex flex-col pt-6 relative">
@@ -235,22 +314,40 @@ export default function CreateAssignmentPage() {
 
             <div className="space-y-3">
               <Heading variant="h3" className="text-2xl font-bold text-white tracking-tight">
-                Formulating Assignment Sheet
+                {hasFailed ? "AI Generation Failed" : "Formulating Assignment Sheet"}
               </Heading>
               <div className="h-8 flex items-center justify-center">
                 <Text className="text-xs font-mono text-zinc-300 tracking-wide">
-                  {generationSteps[currentStepIdx] || "Formulating output..."}
+                  {hasFailed ? errorLogs : (currentStatus || "Structuring topic paradigms...")}
                 </Text>
               </div>
             </div>
 
-            <div className="space-y-2.5">
-              <Loader variant="bar" size="md" color="accent" className="h-2 rounded-full bg-zinc-800" />
-              <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
-                <span className="flex items-center gap-1"><Sparkles className="h-3 w-3 text-accent animate-pulse" /> PHASE {Math.min(currentStepIdx + 1, 5)} OF 5</span>
-                <span>{Math.round((Math.min(currentStepIdx, 5) / 5) * 100)}% COMPLETE</span>
+            {hasFailed ? (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsGenerating(false);
+                  resetGenerationStore();
+                }}
+                className="mt-4 border-zinc-700 hover:bg-zinc-800 text-white rounded-xl"
+              >
+                Close & Retry
+              </Button>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-veda-purple-500 to-veda-indigo-500 transition-all duration-500" 
+                    style={{ width: `${generationProgress}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
+                  <span className="flex items-center gap-1"><Sparkles className="h-3 w-3 text-accent animate-pulse" /> PHASE {generationProgress < 25 ? "1" : generationProgress < 50 ? "2" : generationProgress < 75 ? "3" : generationProgress < 100 ? "4" : "5"} OF 5</span>
+                  <span>{generationProgress}% COMPLETE</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

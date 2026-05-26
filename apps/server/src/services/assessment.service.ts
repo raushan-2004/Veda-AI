@@ -1,6 +1,8 @@
 import { aiGenerationQueue } from '@/queues';
 import { NotFoundError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { AssignmentModel } from '@/models/assignment.model';
+import mongoose from 'mongoose';
 
 export interface AssessmentCreationData {
   title: string;
@@ -19,78 +21,68 @@ export interface AssessmentCreationData {
 }
 
 export class AssessmentService {
-  private mockAssessments = [
-    {
-      _id: "react-fundamentals",
-      title: "React Fundamentals",
-      description: "Covers hooks, virtual DOM, and component lifecycles.",
-      questions: 10,
-      difficulty: "intermediate",
-      created: "2026-05-24",
-      averageScore: "88%",
-      submissions: 24,
-    },
-    {
-      _id: "express-api-engineering",
-      title: "Express API Engineering",
-      description: "Middleware routing, rate limiters, and error handlers.",
-      questions: 15,
-      difficulty: "expert",
-      created: "2026-05-22",
-      averageScore: "74%",
-      submissions: 18,
-    },
-  ];
-
   public async getAll() {
-    return this.mockAssessments;
+    return AssignmentModel.find().sort({ createdAt: -1 });
   }
 
   public async getById(id: string) {
-    const item = this.mockAssessments.find((a) => a._id === id);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new NotFoundError(`Assignment with ID '${id}' is not a valid identifier`);
+    }
+    const item = await AssignmentModel.findById(id);
     if (!item) {
-      throw new NotFoundError(`Assessment catalog log with ID '${id}' not found`);
+      throw new NotFoundError(`Assignment with ID '${id}' not found`);
     }
     return item;
   }
 
   public async create(data: AssessmentCreationData, userId: string) {
-    const mockId = `assessment_${Math.random().toString(36).substring(7)}`;
-    const newAssessment = {
-      _id: mockId,
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : new mongoose.Types.ObjectId();
+
+    // Create real persistent Assignment in MongoDB
+    const assignment = await AssignmentModel.create({
       title: data.title,
-      description: data.instructions || `AI Generated assessment on ${data.subject}`,
-      questions: data.numQuestions,
-      difficulty: data.difficulty.expert > 50 ? 'expert' : data.difficulty.intermediate > 50 ? 'intermediate' : 'beginner',
-      created: new Date().toISOString().split('T')[0],
-      averageScore: '0%',
-      submissions: 0,
-    };
+      subject: data.subject,
+      classGrade: data.classGrade,
+      dueDate: new Date(data.dueDate),
+      numQuestions: data.numQuestions,
+      marks: data.marks,
+      difficulty: {
+        beginner: data.difficulty.beginner,
+        intermediate: data.difficulty.intermediate,
+        expert: data.difficulty.expert,
+      },
+      formats: data.formats,
+      instructions: data.instructions,
+      status: 'draft',
+      createdBy: userObjectId,
+    });
 
-    // Add mock assessment to memory cache
-    this.mockAssessments.unshift(newAssessment);
+    const assignmentIdStr = assignment._id.toString();
 
-    // Trigger BullMQ AI Generation background process
+    // Trigger BullMQ AI Generation background process using real database ID
     try {
       await aiGenerationQueue.add(
         'generate-quiz',
         {
           topic: `${data.subject} — ${data.title}`,
           userId,
-          assessmentId: mockId,
+          assessmentId: assignmentIdStr,
           numQuestions: data.numQuestions,
           formats: data.formats,
         },
         {
-          jobId: `job_${mockId}`,
+          jobId: `job_${assignmentIdStr}`,
         }
       );
-      logger.info(`🚀 BullMQ AI Generation background task queued: job_${mockId}`);
+      logger.info(`🚀 BullMQ AI Generation background task queued: job_${assignmentIdStr}`);
     } catch (queueError: any) {
       logger.warn(`⚠️ BullMQ queue skipped (connection unavailable): ${queueError.message}`);
     }
 
-    return newAssessment;
+    return assignment;
   }
 }
 
