@@ -27,8 +27,8 @@ export async function connectRedis(): Promise<void> {
     }
   }
 
-  // If protocol is TLS (rediss:), configure tls: {} to support Upstash secure connections
-  if (redisUrl.startsWith('rediss:')) {
+  // If protocol is TLS (rediss:), or Upstash/TLS is detected, configure tls: {} to support secure connections
+  if (redisUrl.startsWith('rediss:') || env.REDIS_URL.includes('tls') || env.REDIS_URL.includes('upstash.io')) {
     redisOptions.tls = {};
   }
 

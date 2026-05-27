@@ -159,5 +159,9 @@ export const aiGenerationWorker = new Worker(
   { connection, concurrency: env.QUEUE_CONCURRENCY || 5 }
 );
 
+aiGenerationWorker.on('error', (err) => {
+  logger.warn(`BullMQ ai-generation Worker warning: ${err.message}`);
+});
+
 export default aiGenerationWorker;
 

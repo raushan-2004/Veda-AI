@@ -65,4 +65,8 @@ export const pdfGenerationWorker = new Worker(
   { connection, concurrency: env.QUEUE_CONCURRENCY || 5 }
 );
 
+pdfGenerationWorker.on('error', (err) => {
+  logger.warn(`BullMQ pdf-generation Worker warning: ${err.message}`);
+});
+
 export default pdfGenerationWorker;

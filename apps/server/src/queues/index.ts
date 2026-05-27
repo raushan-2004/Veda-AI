@@ -1,5 +1,6 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { env } from '@/config/env';
+import { logger } from '@/utils/logger';
 
 let redisHost = 'localhost';
 let redisPort = 6379;
@@ -21,7 +22,7 @@ try {
   redisHost = parsedUrl.hostname;
   redisPort = parseInt(parsedUrl.port || '6379');
   redisPassword = parsedUrl.password || undefined;
-  if (parsedUrl.protocol === 'rediss:') {
+  if (parsedUrl.protocol === 'rediss:' || env.REDIS_URL.includes('tls') || env.REDIS_URL.includes('upstash.io')) {
     redisTls = true;
   }
 } catch (error) {
@@ -58,11 +59,17 @@ export const aiGenerationQueue = new Queue('ai-generation', {
   connection,
   defaultJobOptions,
 });
+aiGenerationQueue.on('error', (err) => {
+  logger.warn(`BullMQ ai-generation Queue warning: ${err.message}`);
+});
 
 // ==================== PDF Generation Queue ====================
 export const pdfGenerationQueue = new Queue('pdf-generation', {
   connection,
   defaultJobOptions,
+});
+pdfGenerationQueue.on('error', (err) => {
+  logger.warn(`BullMQ pdf-generation Queue warning: ${err.message}`);
 });
 
 // ==================== Assessment Grading Queue ====================
@@ -70,8 +77,22 @@ export const gradingQueue = new Queue('assessment-grading', {
   connection,
   defaultJobOptions,
 });
+gradingQueue.on('error', (err) => {
+  logger.warn(`BullMQ assessment-grading Queue warning: ${err.message}`);
+});
 
 // ==================== Queue Events ====================
 export const aiQueueEvents = new QueueEvents('ai-generation', { connection });
+aiQueueEvents.on('error', (err) => {
+  logger.warn(`BullMQ ai-generation QueueEvents warning: ${err.message}`);
+});
+
 export const pdfQueueEvents = new QueueEvents('pdf-generation', { connection });
+pdfQueueEvents.on('error', (err) => {
+  logger.warn(`BullMQ pdf-generation QueueEvents warning: ${err.message}`);
+});
+
 export const gradingQueueEvents = new QueueEvents('assessment-grading', { connection });
+gradingQueueEvents.on('error', (err) => {
+  logger.warn(`BullMQ assessment-grading QueueEvents warning: ${err.message}`);
+});
