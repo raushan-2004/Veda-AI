@@ -8,6 +8,8 @@ export async function connectRedis(): Promise<void> {
   let redisUrl = env.REDIS_URL;
   const redisOptions: any = {
     maxRetriesPerRequest: 3,
+    keepAlive: 10000,
+    connectTimeout: 10000,
     retryStrategy: (times: number) => {
       if (times > 1) {
         return null; // Stop retrying immediately to keep console clean

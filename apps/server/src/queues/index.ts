@@ -34,6 +34,8 @@ export const connection = {
   ...(redisPassword && { password: redisPassword }),
   ...(redisTls && { tls: {} }),
   maxRetriesPerRequest: null,
+  keepAlive: 10000,
+  connectTimeout: 10000,
   enableOfflineQueue: false,
   retryStrategy: (times: number) => {
     // Stop reconnecting immediately on local environments if Redis is unavailable
