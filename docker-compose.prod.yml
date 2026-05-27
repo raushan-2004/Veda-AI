@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: veda-ai-mongodb-prod
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: veda-ai
+    volumes:
+      - mongodb_data_prod:/data/db
+    networks:
+      - veda-ai-network-prod
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: veda-ai-redis-prod
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass "productionpassword"
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - veda-ai-network-prod
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: veda-ai-server-prod
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://admin:password@mongodb:27017/veda-ai?authSource=admin
+      REDIS_URL: redis://:productionpassword@redis:6379
+      JWT_SECRET: supersecretproductiononlyjwtsigningkey32chars
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - veda-ai-network-prod
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+        NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+    container_name: veda-ai-web-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+    depends_on:
+      - server
+    networks:
+      - veda-ai-network-prod
+
+volumes:
+  mongodb_data_prod:
+    driver: local
+  redis_data_prod:
+    driver: local
+
+networks:
+  veda-ai-network-prod:
+    driver: bridge

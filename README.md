@@ -203,7 +203,7 @@ See `.env.example` for all available variables with descriptions.
 ## 🐳 Docker Services
 
 ```bash
-# Start all services
+# Start all development services (MongoDB + Redis)
 docker-compose up -d
 
 # Stop all services
@@ -216,6 +216,29 @@ docker-compose logs -f redis
 # Reset data volumes
 docker-compose down -v
 ```
+
+---
+
+## 🚀 Production Deployment & API Docs
+
+For production environments, Veda AI features high-performance multi-stage Docker builds and a ready-to-run orchestration file.
+
+### 1. Local Production Orchestration
+You can build and spin up the complete, secure production network locally:
+```bash
+docker-compose -f docker-compose.prod.yml up -d --build
+```
+This builds standard multi-stage production images for `@veda-ai/server` and `@veda-ai/web`, mounts them, and links them with a secure Redis credential database and primary MongoDB instances.
+
+### 2. Comprehensive Cloud Deployment & API Reference
+We have created a step-by-step production handbook detailing:
+* **MongoDB Atlas** database provisioning and user access configs.
+* **Redis Cloud / Upstash** serverless cluster configuration.
+* **Railway / Render / AWS** backend service deployment.
+* **Vercel** Next.js 15 frontend hosting guides.
+* **Full REST & WebSocket API Specification** (endpoints, request payloads, response payloads, socket events).
+
+👉 Please refer to the comprehensive [deployment_guide.md](file:///C:/Users/HP/.gemini/antigravity-ide/brain/cf625d49-7479-4b3e-a2a7-a8b82c22ae35/deployment_guide.md) artifact for all production provisioning details!
 
 ---
 
