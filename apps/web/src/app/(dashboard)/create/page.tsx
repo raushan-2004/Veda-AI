@@ -17,6 +17,7 @@ import { AssignmentFormSchema, type AssignmentFormData } from "@/lib/schemas/ass
 import { useAssignmentFormStore } from "@/store/assignment-form.store";
 import { useGenerationStore } from "@/store/generation.store";
 import { useSocket } from "@/lib/socket";
+import { ScaleIn } from "@/components/ui/motion";
 import { 
   Sparkles, 
   Settings, 
@@ -380,19 +381,38 @@ export default function CreateAssignmentPage() {
               { idx: 2, label: "3. Assets" }
             ].map((step) => {
               const isActive = currentStep === step.idx;
-              const isPast = currentStep > step.idx;
               return (
                 <span
                   key={step.idx}
-                  onClick={() => {
-                    if (isPast || isActive) {
+                  onClick={async () => {
+                    if (step.idx < currentStep) {
                       setStep(step.idx);
+                    } else if (step.idx > currentStep) {
+                      let fieldsToValidate: Array<keyof AssignmentFormData> = [];
+                      if (currentStep === 0) {
+                        fieldsToValidate = ['title', 'subject', 'classGrade', 'dueDate'];
+                      } else if (currentStep === 1) {
+                        fieldsToValidate = ['questionTypes', 'numberOfQuestions', 'marks', 'difficultyDistribution'];
+                      }
+                      
+                      const isCurrentStepValid = await trigger(fieldsToValidate);
+                      if (isCurrentStepValid) {
+                        if (step.idx === currentStep + 1) {
+                          setStep(step.idx);
+                        } else if (step.idx === 2 && currentStep === 0) {
+                          const isStep1Valid = await trigger(['questionTypes', 'numberOfQuestions', 'marks', 'difficultyDistribution']);
+                          if (isStep1Valid) {
+                            setStep(step.idx);
+                          }
+                        }
+                      }
                     }
                   }}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg transition-colors duration-150",
-                    isActive ? "bg-background text-foreground shadow-sm" : "",
-                    isPast ? "cursor-pointer hover:bg-background/40 hover:text-foreground text-muted-foreground/80" : "opacity-50"
+                    "px-3 py-1.5 rounded-lg transition-colors duration-150 cursor-pointer select-none",
+                    isActive 
+                      ? "bg-background text-foreground shadow-sm font-semibold" 
+                      : "hover:bg-background/40 hover:text-foreground text-muted-foreground/80 font-medium"
                   )}
                 >
                   {step.label}
@@ -415,87 +435,89 @@ export default function CreateAssignmentPage() {
           <div className="space-y-6">
             {/* STEP 1: CORE PARAMETERS */}
             {currentStep === 0 && (
-              <Card glass className="border border-border/40 shadow-lg">
-                <CardHeader className="p-6">
-                  <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
-                    <Settings className="h-5 w-5 text-primary" />
-                    Assignment Parameters
-                  </CardTitle>
-                  <CardDescription className="text-xs">Setup core academic descriptors and deadlines.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 pt-0 space-y-4">
-                  {/* Title */}
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Assignment Title</label>
-                    <Input 
-                      type="text" 
-                      placeholder="e.g. Midterm JavaScript Algorithms, Grade 9 Algebra..." 
-                      className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200"
-                      {...register('title')}
-                    />
-                    {errors.title && (
-                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3.5 w-3.5" /> {errors.title.message}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Subject and Grade Grid */}
-                  <Grid cols={1} smCols={2} gap={4}>
+              <ScaleIn duration={0.3} scale={0.97} className="w-full">
+                <Card glass className="border border-border/40 shadow-lg">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
+                      <Settings className="h-5 w-5 text-primary" />
+                      Assignment Parameters
+                    </CardTitle>
+                    <CardDescription className="text-xs">Setup core academic descriptors and deadlines.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0 space-y-4">
+                    {/* Title */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Subject / Topic</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Assignment Title</label>
                       <Input 
                         type="text" 
-                        placeholder="e.g. Mathematics, computer Science" 
-                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
-                        {...register('subject')}
+                        placeholder="e.g. Midterm JavaScript Algorithms, Grade 9 Algebra..." 
+                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all duration-200"
+                        {...register('title')}
                       />
-                      {errors.subject && (
+                      {errors.title && (
                         <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
-                          <AlertCircle className="h-3.5 w-3.5" /> {errors.subject.message}
+                          <AlertCircle className="h-3.5 w-3.5" /> {errors.title.message}
                         </span>
                       )}
                     </div>
 
+                    {/* Subject and Grade Grid */}
+                    <Grid cols={1} smCols={2} gap={4}>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Subject / Topic</label>
+                        <Input 
+                          type="text" 
+                          placeholder="e.g. Mathematics, computer Science" 
+                          className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
+                          {...register('subject')}
+                        />
+                        {errors.subject && (
+                          <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                            <AlertCircle className="h-3.5 w-3.5" /> {errors.subject.message}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Class / Grade Level</label>
+                        <Input 
+                          type="text" 
+                          placeholder="e.g. Grade 10-A, Junior Web Devs" 
+                          className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
+                          {...register('classGrade')}
+                        />
+                        {errors.classGrade && (
+                          <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
+                            <AlertCircle className="h-3.5 w-3.5" /> {errors.classGrade.message}
+                          </span>
+                        )}
+                      </div>
+                    </Grid>
+
+                    {/* Due Date Picker */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Class / Grade Level</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5 text-primary" /> Due Date Picker
+                      </label>
                       <Input 
-                        type="text" 
-                        placeholder="e.g. Grade 10-A, Junior Web Devs" 
-                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all"
-                        {...register('classGrade')}
+                        type="date" 
+                        className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all w-full select-none"
+                        {...register('dueDate')}
                       />
-                      {errors.classGrade && (
+                      {errors.dueDate && (
                         <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
-                          <AlertCircle className="h-3.5 w-3.5" /> {errors.classGrade.message}
+                          <AlertCircle className="h-3.5 w-3.5" /> {errors.dueDate.message}
                         </span>
                       )}
                     </div>
-                  </Grid>
-
-                  {/* Due Date Picker */}
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5 text-primary" /> Due Date Picker
-                    </label>
-                    <Input 
-                      type="date" 
-                      className="focus:ring-2 focus:ring-primary/20 focus:border-primary/60 transition-all w-full select-none"
-                      {...register('dueDate')}
-                    />
-                    {errors.dueDate && (
-                      <span className="text-[10px] text-destructive font-semibold flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3.5 w-3.5" /> {errors.dueDate.message}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </ScaleIn>
             )}
 
             {/* STEP 2: SCHEMA CONFIGURATIONS */}
             {currentStep === 1 && (
-              <div className="space-y-6">
+              <ScaleIn duration={0.3} scale={0.97} className="space-y-6 w-full">
                 {/* Question Formats Checkbox Grid */}
                 <Card glass className="border border-border/40 shadow-lg">
                   <CardHeader className="p-6">
@@ -674,12 +696,12 @@ export default function CreateAssignmentPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
+              </ScaleIn>
             )}
 
             {/* STEP 3: REFERENCE ASSETS & RULES */}
             {currentStep === 2 && (
-              <div className="space-y-6">
+              <ScaleIn duration={0.3} scale={0.97} className="space-y-6 w-full">
                 {/* File Upload drag area */}
                 <Card glass className="border border-border/40 shadow-lg">
                   <CardHeader className="p-6">
@@ -772,7 +794,7 @@ export default function CreateAssignmentPage() {
                     />
                   </CardContent>
                 </Card>
-              </div>
+              </ScaleIn>
             )}
           </div>
 
@@ -796,29 +818,27 @@ export default function CreateAssignmentPage() {
                 </Button>
               )}
 
-              {currentStep < 2 ? (
-                <Button 
-                  key="next-btn"
-                  type="button" 
-                  variant="gradient" 
-                  size="sm" 
-                  className="rounded-xl px-5 py-5 font-bold flex items-center gap-1 text-xs shadow-md"
-                  onClick={handleNext}
-                >
-                  Next <ChevronRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button 
-                  key="submit-btn"
-                  type="submit" 
-                  variant="gradient" 
-                  size="sm" 
-                  disabled={!isValid}
-                  className="rounded-xl px-6 py-5 font-bold flex items-center gap-1.5 text-xs shadow-glow-strong disabled:opacity-50"
-                >
-                  <Sparkles className="h-4.5 w-4.5 mr-1 animate-pulse" /> Start AI Generation
-                </Button>
-              )}
+              <Button 
+                type={currentStep === 2 ? "submit" : "button"} 
+                variant="gradient" 
+                size="sm" 
+                disabled={currentStep === 2 && !isValid}
+                className={cn(
+                  "rounded-xl px-5 py-5 font-bold flex items-center gap-1.5 text-xs shadow-md transition-all duration-200",
+                  currentStep === 2 ? "shadow-glow-strong disabled:opacity-50" : ""
+                )}
+                onClick={(e) => {
+                  if (currentStep < 2) {
+                    handleNext(e);
+                  }
+                }}
+              >
+                {currentStep < 2 ? (
+                  <>Next <ChevronRight className="h-4 w-4" /></>
+                ) : (
+                  <><Sparkles className="h-4.5 w-4.5 mr-1 animate-pulse" /> Start AI Generation</>
+                )}
+              </Button>
             </div>
           </div>
         </form>

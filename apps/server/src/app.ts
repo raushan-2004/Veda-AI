@@ -9,6 +9,7 @@ import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { rateLimiter } from './middleware/rateLimiter';
+import { sanitizeInputMiddleware } from './middleware/sanitize';
 import { apiRouter } from './routes';
 
 export const app = express();
@@ -38,6 +39,7 @@ app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+app.use(sanitizeInputMiddleware);
 
 // ==================== Rate Limiting ====================
 app.use('/api', rateLimiter);
