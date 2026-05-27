@@ -15,6 +15,7 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=apps/server
 
 # Production runner image
