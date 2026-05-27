@@ -1,9 +1,38 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { env } from '@/config/env';
 
+let redisHost = 'localhost';
+let redisPort = 6379;
+let redisPassword = undefined;
+let redisTls = false;
+
+try {
+  let redisUrl = env.REDIS_URL || 'redis://localhost:6379';
+  
+  // Resilient parsing: if user copy-pasted the redis-cli command from Upstash/RedisCloud console
+  if (redisUrl.includes('redis-cli')) {
+    const match = redisUrl.match(/-u\s+(redis[s]?:\/\/[^\s]+)/);
+    if (match && match[1]) {
+      redisUrl = match[1];
+    }
+  }
+
+  const parsedUrl = new URL(redisUrl);
+  redisHost = parsedUrl.hostname;
+  redisPort = parseInt(parsedUrl.port || '6379');
+  redisPassword = parsedUrl.password || undefined;
+  if (parsedUrl.protocol === 'rediss:') {
+    redisTls = true;
+  }
+} catch (error) {
+  console.warn('⚠️ Safe Redis URL parsing failed. Falling back to localhost Redis:', error);
+}
+
 export const connection = {
-  host: new URL(env.REDIS_URL).hostname,
-  port: parseInt(new URL(env.REDIS_URL).port || '6379'),
+  host: redisHost,
+  port: redisPort,
+  ...(redisPassword && { password: redisPassword }),
+  ...(redisTls && { tls: {} }),
   maxRetriesPerRequest: null,
   enableOfflineQueue: false,
   retryStrategy: (times: number) => {
